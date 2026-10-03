@@ -4,6 +4,7 @@ package webdav
 import (
 	"errors"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -14,10 +15,13 @@ import (
 
 // Config preserves the original plugin configuration format.
 type Config struct {
-	URL        string `json:"url"`
-	Username   string `json:"username"`
-	Password   string `json:"password"`
-	MaxFileMiB int64  `json:"maxFileMiB"`
+	URL             string `json:"url"`
+	Username        string `json:"username"`
+	Password        string `json:"password"`
+	MaxFileMiB      int64  `json:"maxFileMiB"`
+	UploadMode      string `json:"uploadMode,omitempty"`
+	CloudDriveToken string `json:"cloudDriveToken,omitempty"`
+	CloudDriveRoot  string `json:"cloudDriveRoot,omitempty"`
 }
 
 // Record preserves every original uploads SQLite column, including imported IDs.
@@ -52,6 +56,27 @@ func validateConfig(c Config) (Config, error) {
 	if c.MaxFileMiB < 0 || c.MaxFileMiB > 4096 {
 		return c, errors.New("文件上限需为 0–4096 MiB，0 表示不限")
 	}
+	if c.UploadMode != "" && c.UploadMode != "webdav" && c.UploadMode != "clouddrive" {
+		return c, errors.New("上传模式需为 webdav 或 clouddrive")
+	}
+	if strings.IndexFunc(c.CloudDriveToken, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+		return c, errors.New("CloudDrive API Token 不能包含空白或控制字符")
+	}
+	if c.UploadMode == "clouddrive" && c.CloudDriveToken == "" {
+		return c, errors.New("请先配置 CloudDrive API Token")
+	}
+	if c.CloudDriveRoot == "" {
+		c.CloudDriveRoot = "/"
+	}
+	if !strings.HasPrefix(c.CloudDriveRoot, "/") || strings.ContainsAny(c.CloudDriveRoot, "\\\x00\r\n") {
+		return c, errors.New("CloudDrive API 根路径必须为绝对目录")
+	}
+	for _, part := range strings.Split(c.CloudDriveRoot, "/") {
+		if part == ".." {
+			return c, errors.New("CloudDrive API 根路径不能包含 ..")
+		}
+	}
+	c.CloudDriveRoot = path.Clean(c.CloudDriveRoot)
 	c.URL = strings.TrimRight(u.String(), "/")
 	return c, nil
 }

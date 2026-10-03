@@ -28,7 +28,7 @@ func Register(a *app.App) {
 		if match := configValue.FindStringSubmatch(inv.Text); len(match) > 1 {
 			r.value = match[1]
 		}
-		r.hide = func(ctx context.Context) error { return inv.EditText(ctx, "🔐 密码配置命令已隐藏") }
+		r.hide = func(ctx context.Context) error { return inv.EditText(ctx, "🔐 凭据配置命令已隐藏") }
 		r.name = func(message *bot.Message) string {
 			switch p := message.Peer.(type) {
 			case *tg.PeerChannel:

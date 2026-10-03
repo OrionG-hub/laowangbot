@@ -133,21 +133,29 @@ func (d *davClient) upload(ctx context.Context, file, destination string, bytes 
 	if err != nil {
 		return err
 	}
+	if put.status == http.StatusRequestEntityTooLarge {
+		return fmt.Errorf("WebDAV 服务端或中间代理拒绝了上传大小（HTTP 413，%.1f MiB）。请检查上传限制；CloudDrive 可配置 API 分片模式，.dav config limit 0 无法解除服务端限制。远端可能留有 .partial- 文件", float64(bytes)/(1<<20))
+	}
 	if put.status != 200 && put.status != 201 && put.status != 204 {
 		return fmt.Errorf("上传失败：HTTP %d（未完成文件以 .partial- 标识）", put.status)
 	}
-	check := func(path string) error {
-		head, err := d.request(ctx, "HEAD", path, nil, "", 0)
-		if err != nil {
-			return err
-		}
-		n, e := strconv.ParseInt(head.header.Get("Content-Length"), 10, 64)
-		if head.status != 200 || e != nil || n != bytes {
-			return errors.New("远端文件大小核验失败，不写成功记录；远端文件已保留")
-		}
-		return nil
+	return d.finish(ctx, temporary, destination, bytes)
+}
+
+func (d *davClient) verify(ctx context.Context, path string, bytes int64) error {
+	head, err := d.request(ctx, "HEAD", path, nil, "", 0)
+	if err != nil {
+		return err
 	}
-	if err := check(temporary); err != nil {
+	n, e := strconv.ParseInt(head.header.Get("Content-Length"), 10, 64)
+	if head.status != 200 || e != nil || n != bytes {
+		return errors.New("远端文件大小核验失败，不写成功记录；远端文件已保留")
+	}
+	return nil
+}
+
+func (d *davClient) finish(ctx context.Context, temporary, destination string, bytes int64) error {
+	if err := d.verify(ctx, temporary, bytes); err != nil {
 		return err
 	}
 	moved, err := d.request(ctx, "MOVE", temporary, map[string]string{"Destination": d.url(destination), "Overwrite": "F"}, "", 0)
@@ -157,5 +165,5 @@ func (d *davClient) upload(ctx context.Context, file, destination string, bytes 
 	if moved.status != 201 && moved.status != 204 {
 		return fmt.Errorf("完成归档失败：HTTP %d；不覆盖已有文件，临时上传已保留", moved.status)
 	}
-	return check(destination)
+	return d.verify(ctx, destination, bytes)
 }

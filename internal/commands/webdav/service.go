@@ -121,6 +121,12 @@ func (s *service) handle(ctx context.Context, r *request) error {
 		if res.status != 207 {
 			return fmt.Errorf("WebDAV 连接检查失败：HTTP %d", res.status)
 		}
+		if c.UploadMode == "clouddrive" {
+			if err := (cloudDriveClient{&d}).test(test); err != nil {
+				return err
+			}
+			return r.edit(ctx, "✅ WebDAV 与 CloudDrive API 根目录可访问（只读检测；两者必须指向同一目录，实际上传仍需写入和移动权限）")
+		}
 		return r.edit(ctx, "✅ WebDAV 根目录可访问（只读检测；实际上传还需要创建、写入和移动权限）")
 	case "":
 		s.mu.Lock()
@@ -166,9 +172,9 @@ func (s *service) configure(ctx context.Context, r *request) error {
 	if value == "" {
 		value = strings.Join(r.args[min(2, len(r.args)):], " ")
 	}
-	if field == "pass" && value != "" && r.hide != nil {
+	if (field == "pass" || field == "cdtoken") && value != "" && r.hide != nil {
 		if err := r.hide(ctx); err != nil {
-			return errors.New("无法隐藏密码配置命令，请先手动删除后重试")
+			return errors.New("无法隐藏凭据配置命令，请先手动删除后重试")
 		}
 	}
 	if !r.saved {
@@ -188,11 +194,23 @@ func (s *service) configure(ctx context.Context, r *request) error {
 		if c.Password != "" {
 			password = "已设置（隐藏）"
 		}
+		mode := c.UploadMode
+		if mode == "" {
+			mode = "webdav"
+		}
+		token := "未设置"
+		if c.CloudDriveToken != "" {
+			token = "已设置（隐藏）"
+		}
+		root := c.CloudDriveRoot
+		if root == "" {
+			root = "/"
+		}
 		limit := fmt.Sprintf("%d MiB", c.MaxFileMiB)
 		if c.MaxFileMiB == 0 {
 			limit = "不限（保留本机磁盘保护）"
 		}
-		return r.edit(ctx, "🔐 <b>WebDAV 配置</b>\n地址："+command.Escape(c.URL)+"\n用户名："+command.Escape(c.Username)+"\n密码："+password+"\n单文件上限："+limit+"\n\n"+command.Code(r.prefix+"dav config url https://example.com/dav")+"\n"+command.Code(r.prefix+"dav config user 用户名")+"\n"+command.Code(r.prefix+"dav config pass 密码")+"\n"+command.Code(r.prefix+"dav config limit 0")+"\n保存立即生效；密码经 Telegram 云聊天传输，隐藏命令不能保证清除其他客户端缓存。")
+		return r.edit(ctx, "🔐 <b>WebDAV 配置</b>\n地址："+command.Escape(c.URL)+"\n用户名："+command.Escape(c.Username)+"\n密码："+password+"\n上传模式："+command.Escape(mode)+"\nCloudDrive Token："+token+"\nAPI 根路径："+command.Escape(root)+"\n单文件上限："+limit+"\n\n"+command.Code(r.prefix+"dav config url https://example.com/dav")+"\n"+command.Code(r.prefix+"dav config user 用户名")+"\n"+command.Code(r.prefix+"dav config pass 密码")+"\n"+command.Code(r.prefix+"dav config limit 0")+"\n"+command.Code(r.prefix+"dav config cdtoken API令牌")+"\n"+command.Code(r.prefix+"dav config cdroot /")+"\n"+command.Code(r.prefix+"dav config mode clouddrive")+"\nCloudDrive 按80 MiB分片；API根路径需对应WebDAV根目录。\n保存立即生效；凭据经 Telegram 云聊天传输，隐藏命令不能保证清除其他客户端缓存。")
 	}
 	if value == "" {
 		return errors.New("配置值不能为空")
@@ -215,6 +233,27 @@ func (s *service) configure(ctx context.Context, r *request) error {
 		c.Username = value
 	case "pass":
 		c.Password = value
+	case "mode", "cdtoken", "cdroot":
+		candidate := c
+		switch field {
+		case "mode":
+			candidate.UploadMode = strings.TrimSpace(value)
+		case "cdtoken":
+			candidate.CloudDriveToken = value
+		case "cdroot":
+			candidate.CloudDriveRoot = strings.TrimSpace(value)
+		}
+		// Validate incremental settings before URL and DAV credentials are configured.
+		check := candidate
+		if check.URL == "" {
+			check.URL = "https://config.invalid/dav"
+		}
+		check.Username, check.Password = "validate", "validate"
+		checked, e := validateConfig(check)
+		if e != nil {
+			return e
+		}
+		c.UploadMode, c.CloudDriveToken, c.CloudDriveRoot = candidate.UploadMode, candidate.CloudDriveToken, checked.CloudDriveRoot
 	case "limit":
 		n, e := strconv.ParseInt(value, 10, 64)
 		if e != nil || n < 0 || n > 4096 {
@@ -222,13 +261,16 @@ func (s *service) configure(ctx context.Context, r *request) error {
 		}
 		c.MaxFileMiB = n
 	default:
-		return errors.New("支持 url / user / pass / limit")
+		return errors.New("支持 url / user / pass / limit / mode / cdtoken / cdroot")
 	}
 	if err := s.config.Update(func(saved *Config) error { *saved = c; return nil }); err != nil {
 		return errors.New("WebDAV 配置保存失败")
 	}
 	if field == "pass" {
 		field = "密码（不回显）"
+	}
+	if field == "cdtoken" {
+		field = "CloudDrive Token（不回显）"
 	}
 	return r.edit(ctx, "✅ 已保存 "+field+"，无需重启。")
 }
@@ -446,7 +488,22 @@ func (s *service) upload(ctx context.Context, r *request) error {
 	if err := d.directory(ctx, directory); err != nil {
 		return err
 	}
-	if err := d.upload(ctx, local, destination, bytes); err != nil {
+	if c.UploadMode == "clouddrive" {
+		err = (cloudDriveClient{&d}).upload(ctx, local, destination, bytes, func(done, total int64) {
+			update, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
+			parts := (total + cloudDriveChunkSize - 1) / cloudDriveChunkSize
+			part := min(parts, done/cloudDriveChunkSize+1)
+			phase := fmt.Sprintf("⬆️ CloudDrive 分片：%d/%d · 每片80 MiB\n已确认 %.1f / %.1f MiB", part, parts, float64(done)/(1<<20), float64(total)/(1<<20))
+			if done == total {
+				phase = "⬆️ 分片写入完成，正在关闭文件并核验归档…"
+			}
+			_ = r.edit(update, phase)
+		})
+	} else {
+		err = d.upload(ctx, local, destination, bytes)
+	}
+	if err != nil {
 		return err
 	}
 	if ctx.Err() != nil {
