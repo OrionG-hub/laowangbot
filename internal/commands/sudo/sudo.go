@@ -46,7 +46,7 @@ var delegable = map[string][]string{
 	"st":        nil,
 	"yvlu":      {"config", "s"},
 	"whois":     {"clear", "history"},
-	"eatgif":    {"clear"},
+	"eatgif":    {"clear", "cache"},
 	"eat":       {"set"},
 	"eat2":      {"set"},
 	"ai":        {"config", "model", "reasoning", "service", "prompt", "collapse", "timeout", "telegraph"},

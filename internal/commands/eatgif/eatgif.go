@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -72,11 +73,11 @@ type eatgifEntry struct {
 
 type eatgifService struct {
 	a       *app.App
+	lane    *renderLane
 	mu      sync.Mutex
 	catalog map[string]eatgifEntry
 	// catalogAt 是 catalog 读进内存的时间，超过 docRefresh 就重读。
 	catalogAt time.Time
-	running   bool
 }
 
 // safeRelative 拒绝可能跑出缓存目录或素材根路径的素材路径。这里的每个路径
@@ -155,31 +156,31 @@ func download(ctx context.Context, cache, url string, limit int64) ([]byte, erro
 	if !response.OK() {
 		return nil, &httpx.StatusError{Status: response.Status}
 	}
-	if err := os.MkdirAll(filepath.Dir(cache), 0o700); err != nil {
-		return nil, err
-	}
-	// 以原子方式落盘：同时执行的两条命令绝不能读到写了一半的素材。
-	temporary := cache + ".tmp"
-	if err := os.WriteFile(temporary, response.Body, 0o600); err == nil {
-		_ = os.Rename(temporary, cache)
-	}
+	// 落盘失败不影响这一次：内容已经在手上了，下次再试着缓存。
+	_ = writeCacheFile(cache, response.Body)
 	return response.Body, nil
+}
+
+// assetDocument 读取一份会更新的素材，反序列化到 out，并给出这次实际用到的内容的摘要。
+func (s *eatgifService) assetDocument(ctx context.Context, relative string, out any) (string, error) {
+	clean, err := safeRelative(relative)
+	if err != nil {
+		return "", err
+	}
+	data, err := fetchFresh(ctx, s.a, "eatgif", clean, eatgifRoot+clean, 1<<20, docRefresh)
+	if err != nil {
+		return "", err
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return "", kit.Fail("素材配置无效")
+	}
+	return digestBytes(data), nil
 }
 
 // assetJSON 读取目录或动画定义。它们会随仓库更新，所以缓存有有效期，见 docRefresh。
 func (s *eatgifService) assetJSON(ctx context.Context, relative string, out any) error {
-	clean, err := safeRelative(relative)
-	if err != nil {
-		return err
-	}
-	data, err := fetchFresh(ctx, s.a, "eatgif", clean, eatgifRoot+clean, 1<<20, docRefresh)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		return kit.Fail("素材配置无效")
-	}
-	return nil
+	_, err := s.assetDocument(ctx, relative, out)
+	return err
 }
 
 func (s *eatgifService) getCatalog(ctx context.Context) (map[string]eatgifEntry, error) {
@@ -254,7 +255,10 @@ func (s *eatgifService) help(prefix string) string {
 	p := command.Escape(prefix)
 	text := "🎬 <b>头像动图表情</b>\n\n回复一条消息（用户或频道发的都可以），把双方头像合成为动画贴纸。\n\n" +
 		"• 回复一条消息发 <code>" + p + "eatgif 名称</code> 生成\n• <code>" + p +
-		"eatgif list</code> 列出全部可用动画\n• <code>" + p + "eatgif clear</code> 清空素材缓存\n\n"
+		"eatgif list</code> 列出全部可用动画\n• <code>" + p +
+		"eatgif clear</code> 清空素材缓存\n• <code>" + p + "eatgif cache</code> 看缓存记录（只限本人）\n\n" +
+		"同一个人同一款动画生成过一次就存下来，再发秒回；对方换了头像会自动重做一份。\n" +
+		"命令发出去就删掉，不在聊天里显示中间状态，动图在后台跑完后回复到原消息上。\n\n"
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	catalog, err := s.getCatalog(ctx)
@@ -273,15 +277,20 @@ func (s *eatgifService) help(prefix string) string {
 	return text + strings.Join(lines, "\n") + "\n\n素材首次使用时从远程下载并缓存，需要主机装有 ffmpeg。"
 }
 
-// Register 注册 .eatgif、.eat 和 .eat2。
+// Register 注册 .eatgif、.eat 和 .eat2。三者共用一条后台队列和一份头像记录。
 func Register(a *app.App) {
-	registerEat(a)
 	service := &eatgifService{a: a}
+	lane := newRenderLane(a)
+	service.lane = lane
+	lane.worker = service
+	registerEat(a, lane)
+	a.Registry.AddJob(lane.run)
 	a.Registry.Register(&command.Command{Name: "eatgif", Description: "将双方头像合成为动画贴纸", Usage: "名称", Help: service.help, Timeout: 5 * time.Minute,
 		Handle: func(ctx context.Context, inv *command.Invocation) error {
 			sub := strings.ToLower(inv.Arg(0))
 			if sub == "clear" {
-				if err := os.RemoveAll(filepath.Join(a.DataDir(), "eatgif")); err != nil {
+				// 素材和成品一起清，但留下谁换过头像的记录：那是事实，不是可重下的素材。
+				if err := clearCacheDir(filepath.Join(a.DataDir(), "eatgif")); err != nil {
 					return err
 				}
 				service.mu.Lock()
@@ -292,6 +301,13 @@ func Register(a *app.App) {
 			catalog, err := service.getCatalog(ctx)
 			if err != nil {
 				return inv.Edit(ctx, "❌ 无法读取素材列表："+command.Escape(httpx.Reason(err)))
+			}
+			if sub == "cache" {
+				// 放在读目录之后：万一远程真有一款叫 cache 的动画，让动画优先。
+				// 这是只给机主看的诊断面板，少一个入口比吞掉一个大家在用的动画划算。
+				if _, taken := catalog[sub]; !taken {
+					return kit.SendPages(ctx, inv, command.HTMLPages(lane.cachePanel(facesOf(inv.Client)), 3800))
+				}
 			}
 			if sub == "" || sub == "list" || sub == "ls" || sub == "help" || sub == "h" {
 				names := make([]string, 0, len(catalog))
@@ -316,136 +332,54 @@ func Register(a *app.App) {
 			if reply == nil {
 				return inv.EditText(ctx, "请回复一条消息后再生成，用户或频道发的都可以")
 			}
-
-			// 一次只跑一个：每次运行都要解码几十帧、再 fork 一个 ffmpeg，
-			// 而这个程序的宗旨就是保持轻量。
-			service.mu.Lock()
-			if service.running {
-				service.mu.Unlock()
-				return inv.EditText(ctx, "已有一个动图正在生成，请稍候")
-			}
-			service.running = true
-			service.mu.Unlock()
-			defer func() { service.mu.Lock(); service.running = false; service.mu.Unlock() }()
-
-			if err := inv.EditText(ctx, "正在生成："+selected.Desc); err != nil {
-				return err
-			}
-			var spec eatgifSpec
-			if err := service.assetJSON(ctx, selected.URL, &spec); err != nil {
-				return inv.Edit(ctx, "❌ 无法读取动画定义："+command.Escape(httpx.Reason(err)))
-			}
-			if spec.Width < 1 || spec.Height < 1 || spec.Width > 512 || spec.Height > 512 || len(spec.Frames) < 1 || len(spec.Frames) > eatgifMaxFrames {
-				return inv.EditText(ctx, "❌ 动画定义无效")
-			}
-
-			faces, err := service.faces(ctx, inv, reply)
+			me, you, err := facePeers(inv, reply)
 			if err != nil {
 				if text, ok := kit.IsUserError(err); ok {
 					return inv.EditText(ctx, "❌ "+text)
 				}
 				return err
 			}
-
-			directory, err := os.MkdirTemp("", "mibot-eatgif-")
-			if err != nil {
-				return err
-			}
-			defer os.RemoveAll(directory)
-
-			frames := make([]media.Frame, 0, len(spec.Frames))
-			var total time.Duration
-			for index, entry := range spec.Frames {
-				if err := ctx.Err(); err != nil {
-					return err
-				}
-				canvasData, err := service.asset(ctx, entry.URL, 5<<20)
-				if err != nil {
-					return inv.Edit(ctx, "❌ 素材下载失败："+command.Escape(httpx.Reason(err)))
-				}
-				canvas, err := frameCanvas(canvasData)
-				if err != nil {
-					return inv.EditText(ctx, "❌ 素材图片无效")
-				}
-				// 先贴被回复者的头像，再贴本账号的，与素材定义编写时的顺序一致。
-				if entry.You != nil {
-					if err := service.paste(ctx, canvas, entry.You, faces.you); err != nil {
-						return inv.Edit(ctx, "❌ 合成失败："+command.Escape(httpx.Reason(err)))
-					}
-				}
-				if entry.Me != nil {
-					if err := service.paste(ctx, canvas, entry.Me, faces.me); err != nil {
-						return inv.Edit(ctx, "❌ 合成失败："+command.Escape(httpx.Reason(err)))
-					}
-				}
-				path := filepath.Join(directory, fmt.Sprintf("frame%04d.png", index))
-				file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+			target := service.target(facesOf(inv.Client), me, you, selected)
+			// 已经生成过就直接发出去：不跑 ffmpeg，也就犯不着排队，当场办完。
+			if data, meta, ok := lane.lookup(target, service.freshSpecDigest(selected.URL)); ok {
+				peer, err := inv.Client.InputPeer(inv.Message.Peer)
 				if err != nil {
 					return err
 				}
-				err = imaging.WritePNG(file, canvas)
-				if closeErr := file.Close(); err == nil {
-					err = closeErr
-				}
-				if err != nil {
+				if err := sendSticker(ctx, inv.Client, peer, data, meta, inv.Message.ReplyToID); err != nil {
 					return err
 				}
-				delay := 100
-				if entry.Delay != nil {
-					delay = kit.Clamp(*entry.Delay, 20, 5000)
-				}
-				frames = append(frames, media.Frame{Path: path, Delay: time.Duration(delay) * time.Millisecond})
-				total += time.Duration(delay) * time.Millisecond
+				lane.note(facesOf(inv.Client), []tg.InputPeerClass{me, you}, false)
+				_ = inv.Client.DeleteMessage(ctx, inv.Message)
+				return nil
 			}
-
-			webm, err := media.StickerWebM(ctx, directory, frames, spec.Width, spec.Height)
-			if err != nil {
-				return inv.Edit(ctx, "❌ 视频编码失败："+command.Escape(command.Brief(err)))
+			// 要生成就不在这儿跑：排进队列，立刻把这条指令删掉，稍后作为回复发出。
+			// 「一次只跑一个 ffmpeg」的老规矩改由队列保证，命令不用干等，也不用再看中间状态。
+			if !lane.enqueue(&renderJob{target: target, label: selected.Desc,
+				chatID: inv.Message.ChatID, replyTo: inv.Message.ReplyToID, me: me, you: you}) {
+				return inv.EditText(ctx, "已有一个动图在生成，队列也排满了，请稍候再发")
 			}
-			peer, err := inv.Client.InputPeer(inv.Message.Peer)
-			if err != nil {
-				return err
+			if err := inv.Client.DeleteMessage(ctx, inv.Message); err != nil {
+				inv.Log.Warn("eatgif.delete_failed", slog.String("error", err.Error()))
 			}
-			options := bot.DocumentOptions{Name: "sticker.webm", MimeType: "video/webm", ReplyTo: inv.Message.ReplyToID,
-				Attributes: []tg.DocumentAttributeClass{
-					&tg.DocumentAttributeSticker{Alt: "✨", Stickerset: &tg.InputStickerSetEmpty{}},
-					&tg.DocumentAttributeImageSize{W: spec.Width, H: spec.Height},
-					// 原插件经 teleproto 按 .webm 文件发送，它会自动加上视频属性；
-					// Telegram 自己的客户端发视频贴纸也带这一项，宽高和时长都是实际值。
-					&tg.DocumentAttributeVideo{W: spec.Width, H: spec.Height, Duration: total.Seconds()},
-				}}
-			if err := inv.Client.SendDocumentWith(ctx, peer, webm, options); err != nil {
-				return err
-			}
-			return inv.Client.DeleteMessage(ctx, inv.Message)
+			return nil
 		}})
 }
 
-// avatarPair 是一个动画要合成的两张头像。
-type avatarPair struct{ me, you image.Image }
-
-// faces 下载并解码双方的头像。
+// facePeers 找出两张头像该用谁的对象。
 //
 // 「对方」是被回复消息的发送者，用户、频道、群都可以：以频道身份发言、
 // 频道推到讨论组的消息、匿名管理员，发送者都不是用户，以前一律被拒。
 // 「自己」见 ownFace。
-func (s *eatgifService) faces(ctx context.Context, inv *command.Invocation, reply *bot.Message) (*avatarPair, error) {
-	me, err := loadFace(ctx, inv.Client, ownFace(inv), "你")
-	if err != nil {
-		return nil, err
-	}
+func facePeers(inv *command.Invocation, reply *bot.Message) (me, you tg.InputPeerClass, err error) {
 	if reply.Sender == nil {
-		return nil, kit.Fail("看不出被回复的消息是谁发的")
+		return nil, nil, kit.Fail("看不出被回复的消息是谁发的")
 	}
 	peer, err := inv.Client.InputPeer(reply.Sender)
 	if err != nil {
-		return nil, kit.Fail("无法解析对方的身份")
+		return nil, nil, kit.Fail("无法解析对方的身份")
 	}
-	you, err := loadFace(ctx, inv.Client, peer, "对方")
-	if err != nil {
-		return nil, err
-	}
-	return &avatarPair{me: me, you: you}, nil
+	return ownFace(inv), peer, nil
 }
 
 // ownFace 是「自己」那张头像该用谁的：别人借用账号（.sudo、.sure）时用借用者的，
@@ -486,4 +420,136 @@ func loadFace(ctx context.Context, client *bot.Client, peer tg.InputPeerClass, w
 		return nil, kit.Failf("无法解析%s的头像", who)
 	}
 	return decoded, nil
+}
+
+// faces 下载并解码双方的头像。头像本身不缓存：换头像的代价就是一次下载，
+// 真正贵的是下面几十帧的合成和一次 ffmpeg 编码，那部分才有成品缓存。
+func (s *eatgifService) faces(ctx context.Context, client *bot.Client, me, you tg.InputPeerClass) (*avatarPair, error) {
+	mine, err := loadFace(ctx, client, me, "你")
+	if err != nil {
+		return nil, err
+	}
+	theirs, err := loadFace(ctx, client, you, "对方")
+	if err != nil {
+		return nil, err
+	}
+	return &avatarPair{me: mine, you: theirs}, nil
+}
+
+// avatarPair 是一个动画要合成的两张头像。
+type avatarPair struct{ me, you image.Image }
+
+// spec 读出动画定义，并给出这次实际用到的那份的摘要：定义变了摘要就变，
+// 用旧定义做出来的成品不会被当成新定义做出来的。
+func (s *eatgifService) spec(ctx context.Context, relative string) (eatgifSpec, string, error) {
+	var definition eatgifSpec
+	digest, err := s.assetDocument(ctx, relative, &definition)
+	if err != nil {
+		return eatgifSpec{}, "", err
+	}
+	if definition.Width < 1 || definition.Height < 1 || definition.Width > 512 || definition.Height > 512 ||
+		len(definition.Frames) < 1 || len(definition.Frames) > eatgifMaxFrames {
+		return eatgifSpec{}, "", kit.Fail("动画定义无效")
+	}
+	return definition, digest, nil
+}
+
+// freshSpecDigest 只在磁盘上的定义副本还新鲜时给出摘要，缺失或过期时返回 ""。
+// 那种时候无从判断定义变了没有，命令这一次就不探缓存，交给队列取回定义再精确比对。
+func (s *eatgifService) freshSpecDigest(relative string) string {
+	clean, err := safeRelative(relative)
+	if err != nil {
+		return ""
+	}
+	path := cachePath(s.a, "eatgif", clean)
+	info, err := os.Stat(path)
+	if err != nil || time.Since(info.ModTime()) >= docRefresh {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return digestBytes(data)
+}
+
+// target 拼出这次生成的缓存身份。me 也要进键：借用账号时贴的是借用者的头像，
+// 漏掉它就会把机主的脸当成借用者的发出去。
+func (s *eatgifService) target(p peerPhotos, me, you tg.InputPeerClass, selected eatgifEntry) renderTarget {
+	meKey, youKey := p.key(me), p.key(you)
+	canonical := ""
+	if meKey != "" && youKey != "" {
+		canonical, _ = renderKey("eatgif", renderFormat, "me="+meKey, "you="+youKey, "anim="+selected.URL)
+	}
+	return renderTarget{canonical: canonical, directory: "eatgif", ext: ".webm",
+		specRel: selected.URL, peers: "me=" + meKey + "|you=" + youKey, limit: webmCacheLimit}
+}
+
+// render 逐帧合成再编码成动图贴纸，是队列里那一步的全部。
+// 一次运行要解码几十帧，所以由队列保证同时只跑一个。
+func (s *eatgifService) render(ctx context.Context, client *bot.Client, job *renderJob,
+	definition eatgifSpec, digest string) ([]byte, renderMeta, error) {
+	faces, err := s.faces(ctx, client, job.me, job.you)
+	if err != nil {
+		return nil, renderMeta{}, err
+	}
+	directory, err := os.MkdirTemp("", "mibot-eatgif-")
+	if err != nil {
+		return nil, renderMeta{}, err
+	}
+	defer os.RemoveAll(directory)
+
+	frames := make([]media.Frame, 0, len(definition.Frames))
+	var total time.Duration
+	for index, entry := range definition.Frames {
+		if err := ctx.Err(); err != nil {
+			return nil, renderMeta{}, err
+		}
+		canvasData, err := s.asset(ctx, entry.URL, 5<<20)
+		if err != nil {
+			return nil, renderMeta{}, kit.Fail("素材下载失败：" + httpx.Reason(err))
+		}
+		canvas, err := frameCanvas(canvasData)
+		if err != nil {
+			return nil, renderMeta{}, kit.Fail("素材图片无效")
+		}
+		// 先贴被回复者的头像，再贴本账号的，与素材定义编写时的顺序一致。
+		if entry.You != nil {
+			if err := s.paste(ctx, canvas, entry.You, faces.you); err != nil {
+				return nil, renderMeta{}, kit.Fail("合成失败：" + httpx.Reason(err))
+			}
+		}
+		if entry.Me != nil {
+			if err := s.paste(ctx, canvas, entry.Me, faces.me); err != nil {
+				return nil, renderMeta{}, kit.Fail("合成失败：" + httpx.Reason(err))
+			}
+		}
+		path := filepath.Join(directory, fmt.Sprintf("frame%04d.png", index))
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err != nil {
+			return nil, renderMeta{}, err
+		}
+		err = imaging.WritePNG(file, canvas)
+		if closeErr := file.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			return nil, renderMeta{}, err
+		}
+		delay := 100
+		if entry.Delay != nil {
+			delay = kit.Clamp(*entry.Delay, 20, 5000)
+		}
+		frames = append(frames, media.Frame{Path: path, Delay: time.Duration(delay) * time.Millisecond})
+		total += time.Duration(delay) * time.Millisecond
+	}
+
+	webm, err := media.StickerWebM(ctx, directory, frames, definition.Width, definition.Height)
+	if err != nil {
+		return nil, renderMeta{}, kit.Fail("视频编码失败：" + command.Brief(err))
+	}
+	meta := renderMeta{Kind: "eatgif", Name: "sticker.webm", MimeType: "video/webm", Alt: "✨",
+		Width: definition.Width, Height: definition.Height, Seconds: total.Seconds(),
+		Digest: digest, Peers: job.target.peers, Bytes: int64(len(webm)), MadeAt: time.Now().UnixMilli()}
+	return webm, meta, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"image"
+	"log/slog"
 	"math"
 	"math/rand/v2"
 	"net/url"
@@ -366,18 +367,18 @@ func (s *eatService) help(prefix string) string {
 	return text + strings.Join(lines, "\n") + "\n\n素材来自 TeleBox 插件仓库，首次使用时下载并缓存，需要主机装有 ffmpeg。"
 }
 
-// stickerOptions 是把一张 WebP 当贴纸发出去的参数：不属于任何贴纸包，alt 用款式名。
-func stickerOptions(alt string, webp []byte, replyTo int) bot.DocumentOptions {
+// stickerMeta 是发一张静态贴纸需要的参数。宽高从编码好的 WebP 头部读一次就存进
+// sidecar，命中时再也不必读。
+func stickerMeta(entry eatEntry, webp []byte, target renderTarget) renderMeta {
 	width, height, _ := imaging.WebPSize(webp)
-	return bot.DocumentOptions{Name: "sticker.webp", MimeType: "image/webp", ReplyTo: replyTo,
-		Attributes: []tg.DocumentAttributeClass{
-			&tg.DocumentAttributeSticker{Alt: alt, Stickerset: &tg.InputStickerSetEmpty{}},
-			&tg.DocumentAttributeImageSize{W: width, H: height},
-		}}
+	return renderMeta{Kind: "eat", Name: "sticker.webp", MimeType: "image/webp", Alt: entry.Name,
+		Width: width, Height: height, Peers: target.peers,
+		Bytes: int64(len(webp)), MadeAt: time.Now().UnixMilli()}
 }
 
-// registerEat 注册 .eat 和 .eat2。
-func registerEat(a *app.App) {
+// registerEat 注册 .eat 和 .eat2。它们和 .eatgif 共用一份成品缓存和头像记录，
+// 但不进后台队列：一帧的合成加一次 WebP 编码，快得不值得让命令返回。
+func registerEat(a *app.App, lane *renderLane) {
 	service := &eatService{a: a, settings: kit.NewStore(a, "eat.json", func() eatSettings { return eatSettings{} })}
 	handle := func(fromImage bool) func(context.Context, *command.Invocation) error {
 		name := map[bool]string{false: "eat", true: "eat2"}[fromImage]
@@ -413,8 +414,26 @@ func registerEat(a *app.App) {
 			if !ok {
 				return inv.Edit(ctx, "找不到 "+command.Code(key)+"，不回复消息发 "+command.Code(inv.Prefix+name)+" 看全部款式")
 			}
-			if err := inv.EditText(ctx, "正在生成「"+entry.Name+"」…"); err != nil {
-				return err
+			photos := facesOf(inv.Client)
+			me := ownFace(inv)
+			var you tg.InputPeerClass
+			if !fromImage && reply.Sender != nil {
+				// 认不出对方是谁照样能生成，只是这一次不进缓存。
+				you, _ = inv.Client.InputPeer(reply.Sender)
+			}
+			target := service.staticTarget(photos, entry, me, you, repliedMediaKey(reply), fromImage)
+			// 生成过就直接发：连合成都不跑，也不再显示「正在生成」。
+			if data, meta, ok := lane.lookup(target, ""); ok {
+				peer, err := inv.Client.InputPeer(inv.Message.Peer)
+				if err != nil {
+					return err
+				}
+				if err := sendSticker(ctx, inv.Client, peer, data, meta, inv.Message.ReplyToID); err != nil {
+					return err
+				}
+				lane.note(photos, []tg.InputPeerClass{me, you}, false)
+				_ = inv.Client.DeleteMessage(ctx, inv.Message)
+				return nil
 			}
 			result, err := service.render(ctx, inv, reply, root, entry, fromImage)
 			if err != nil {
@@ -427,9 +446,19 @@ func registerEat(a *app.App) {
 			if err != nil {
 				return err
 			}
-			if err := inv.Client.SendDocumentWith(ctx, peer, result, stickerOptions(entry.Name, result, inv.Message.ReplyToID)); err != nil {
+			meta := stickerMeta(entry, result, target)
+			if err := sendSticker(ctx, inv.Client, peer, result, meta, inv.Message.ReplyToID); err != nil {
 				return err
 			}
+			// 先发出去再落盘：缓存只是省时间，不该让这一张等一次写盘。
+			if target.canonical != "" {
+				if err := lane.storeRender(target, result, meta); err != nil {
+					inv.Log.Warn("eatgif.render_store_failed", slog.String("error", err.Error()))
+				} else if removed := pruneRender(a, "eat"); removed > 0 {
+					inv.Log.Info("eatgif.render_pruned", slog.Int("removed", removed))
+				}
+			}
+			lane.note(photos, []tg.InputPeerClass{me, you}, true)
 			return inv.Client.DeleteMessage(ctx, inv.Message)
 		}
 	}
@@ -437,6 +466,27 @@ func registerEat(a *app.App) {
 		&command.Command{Name: "eat", Description: "用头像生成表情包", Usage: "[名称]", Help: service.help, Timeout: 2 * time.Minute, Handle: handle(false)},
 		&command.Command{Name: "eat2", Description: "用图片生成表情包", Usage: "[名称]", Help: service.help, Timeout: 2 * time.Minute, Handle: handle(true)},
 	)
+}
+
+// staticTarget 拼出这一款静态表情的缓存身份。用不到自己头像的款式（印章、只贴对方的）
+// 不把 me 写进键，不然谁发命令都要各存一份，纯属占地方。.eat2 的被吃方是一张图片而不是
+// 某个人的头像，所以用媒体 id 当身份——它不会变，也就是一份永久有效的身份。
+func (s *eatService) staticTarget(p peerPhotos, entry eatEntry, me, you tg.InputPeerClass, mediaKey string, fromImage bool) renderTarget {
+	youKey := mediaKey
+	if !fromImage {
+		youKey = p.key(you)
+	}
+	meKey := "none"
+	if entry.Me != nil && entry.Stamp == nil {
+		meKey = p.key(me)
+	}
+	canonical := ""
+	if meKey != "" && youKey != "" {
+		canonical, _ = renderKey("eat", renderFormat, "me="+meKey, "you="+youKey,
+			"src="+digestBytes([]byte(s.source()))[:8], "asset="+entry.URL)
+	}
+	return renderTarget{canonical: canonical, directory: "eat", ext: ".webp",
+		peers: "me=" + meKey + "|you=" + youKey, limit: webpCacheLimit}
 }
 
 // render 取头像、合成、编码成 WebP 贴纸。
