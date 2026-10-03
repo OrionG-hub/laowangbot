@@ -269,11 +269,7 @@ func (m *Monitor) origin(ctx context.Context, msg api.Message) map[string]string
 	return map[string]string{"text": "🔗 查看原消息", "url": u}
 }
 func (m *Monitor) event(ctx context.Context, e api.Event) error {
-	received := e.ReceivedAt
-	if received == 0 {
-		received = time.Now().Unix()
-	}
-	if received-int64(e.Date) > 60 {
+	if stale(e) {
 		return nil
 	}
 	if strings.HasPrefix(e.Text, ".monitor sync ") {

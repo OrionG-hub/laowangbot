@@ -29,7 +29,7 @@ func (m *Monitor) details(_ context.Context) string {
 	for _, v := range []struct {
 		label, key string
 		on         bool
-	}{{"总开关", "global", s.IsGlobalEnabled}, {"监听全部群", "set monitor_all_groups", s.MonitorAllGroups}, {"24 小时去重", "set dedup", s.EnableDedup}, {"管理员消息", "set monitor_admins_messages", s.MonitorAdminsMessages}, {"普通用户消息", "set monitor_users_messages", s.MonitorUsersMessages}, {"机器人消息（旧字段 on 表示监控）", "set ignore_bot_messages", s.IgnoreBotMessages}} {
+	}{{"总开关", "global", s.IsGlobalEnabled}, {"监听全部群", "set monitor_all_groups", s.MonitorAllGroups}, {"24 小时去重", "set dedup", s.EnableDedup}, {"管理员消息", "set monitor_admins_messages", s.MonitorAdminsMessages}, {"普通用户消息", "set monitor_users_messages", s.MonitorUsersMessages}, {"机器人消息（旧字段 on 表示监控）", "set ignore_bot_messages", !s.IgnoreBotMessages}} {
 		text(v.label, stateLabel(v.on))
 		next := "on"
 		if v.on {

@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // EventFilter snapshots settings under the plugin lock. The returned predicate
@@ -18,11 +17,7 @@ func (m *Monitor) EventFilter() func(api.Event) bool {
 	var s Settings
 	_ = json.Unmarshal(raw, &s)
 	return func(e api.Event) bool {
-		received := e.ReceivedAt
-		if received == 0 {
-			received = time.Now().Unix()
-		}
-		if received-int64(e.Date) > 60 {
+		if stale(e) {
 			return false
 		}
 		if strings.HasPrefix(e.Text, ".monitor sync ") {

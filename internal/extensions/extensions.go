@@ -141,6 +141,7 @@ func registerEntries(a *app.App, entries []compiled.Entry) error {
 				}
 				payload := messageEvent(msg, c)
 				payload["self_id"] = strconv.FormatInt(c.SelfID(), 10)
+				r.observeIngress(messageDate(msg))
 				raw, _ := json.Marshal(payload)
 				if err := r.enqueue(ctx, event{request: pluginapi.Request{Version: 1, Type: "event", Event: raw}, client: c, message: msg}); err != nil && a.Logger != nil {
 					a.Logger.Warn("plugin.event_enqueue_failed", "plugin", m.Name, "error", err)
@@ -170,6 +171,7 @@ type runtime struct {
 	instance pluginapi.Plugin
 	life     context.Context
 	cancel   context.CancelFunc
+	stats    counters
 }
 
 func stateDirectory(root, name string) (string, error) {
@@ -242,7 +244,9 @@ func (r *runtime) call(ctx context.Context, q pluginapi.Request) (response plugi
 			r.filter.Store(f.EventFilter())
 		}
 	}
-	if elapsed := time.Since(started); elapsed >= time.Second && r.logger != nil {
+	elapsed := time.Since(started)
+	r.observeCall(q.Type, elapsed)
+	if elapsed >= time.Second && r.logger != nil {
 		r.logger.Warn("plugin.request_slow", "plugin", r.manifest.Name, "type", q.Type, "took", elapsed, "queued", len(r.queue))
 	}
 	if err = ctx.Err(); err != nil {
@@ -285,6 +289,7 @@ func (r *runtime) enqueue(ctx context.Context, ev event) error {
 	if f := r.filter.Load(); f != nil {
 		var input pluginapi.Event
 		if json.Unmarshal(ev.request.Event, &input) == nil && !f.(func(pluginapi.Event) bool)(input) {
+			r.stats.filtered.Add(1)
 			return nil
 		}
 	}
@@ -321,6 +326,7 @@ func (r *runtime) run(ctx context.Context, client *bot.Client) {
 		defer t.Stop()
 		ticks = t.C
 	}
+	r.reportStats(ctx)
 	burst := 0
 	for {
 		var ev event

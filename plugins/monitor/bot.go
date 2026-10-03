@@ -104,7 +104,13 @@ func (m *Monitor) callback(ctx context.Context, cb Callback) error {
 	}
 	if cb.From.ID.String() != m.owner {
 		alert = "❌ 权限拒绝：这是机主专属按钮！"
-	} else if a, ok := m.state.Pending[strings.TrimPrefix(cb.Data, "send_")]; ok {
+	} else if a, ok := m.state.Pending[strings.TrimPrefix(cb.Data, "send_")]; !ok {
+		alert = "❌ 该指令已执行过或缓存已清空。"
+	} else if time.Now().UnixMilli()-a.Time > callbackFreshMS {
+		// Polling is stopped while nothing is pending, so a press can surface
+		// long after it was made; the 代发 must not fire on it.
+		alert = "❌ 该按钮已超过 10 分钟，未执行代发。"
+	} else {
 		if cb.Message == nil || cb.Message.Chat.ID == "" {
 			alert = "❌ 无法获取群组信息。"
 		} else {

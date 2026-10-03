@@ -639,7 +639,7 @@ func (m *Monitor) tick(ctx context.Context) error {
 			errs = append(errs, err)
 		}
 	}
-	if m.state.Settings.BotToken != "" && now >= m.nextPoll {
+	if m.state.Settings.BotToken != "" && now >= m.nextPoll && m.awaitingCallback(now) {
 		if err := m.poll(ctx); err != nil {
 			errs = append(errs, err)
 		}
