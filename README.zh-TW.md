@@ -89,7 +89,7 @@ bash scripts/install.sh --binary "$PWD/laowangbot" \
 | 設定與外掛 | `prefix` `alias` `privacy` `tpm` |
 | 查詢工具 | `calc` `rate` `tr` `gt` `whois` `ip` `bin` `ids` `dc` `speedtest` / `st` |
 | AI | `ai` `sum` |
-| 訊息與媒體 | `yvlu` `eatgif` `eat` `eat2` `sticker` `t` `ts` `tk` `re` `save` `dme` `da` |
+| 訊息與媒體 | `yvlu` `eatgif` `eat` `eat2` `sticker` `t` `ts` `tk` `re` `save` `dme` `da` `dav` |
 | 群組管理 | `ban` `unban` `kick` `mute` `unmute` `sb` `unsb` `refresh` `aban` |
 | 帳號與授權 | `acn` / `autochangename` `sudo` `sure` |
 
@@ -125,3 +125,5 @@ go vet ./...
 `pmcaptcha` 私聊驗證亦已內建，新安裝預設關閉。使用 `.pmc` 查看說明，`.pmc on` 啟用規則，`.pmc captcha on` 開啟驗證，設定與記錄儲存於 `state/pmcaptcha`。
 
 TPM 原始碼安裝、更新、移除、匯入和替換暫時停用。`.tpm ls -v` 查看外掛，`.tpm s 關鍵詞` 搜尋，`.tpm ul 名稱` 匯出既有外部原始碼。內建外掛隨 `.update run` 更新主程式；既有自訂原始碼外掛保留原實作與原始碼更新方式。詳見[說明](docs/plugins.md)。
+
+WebDAV 檔案歸檔已內建：回覆媒體傳送 `.dav`，在收藏夾用 `.dav config` 設定，`.dav test` 檢查連線。保留舊設定與上傳記錄，詳見 [WebDAV 說明](docs/webdav.md)。

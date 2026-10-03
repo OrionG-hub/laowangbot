@@ -89,7 +89,7 @@ bash scripts/install.sh --binary "$PWD/laowangbot" \
 | 設定・プラグイン | `prefix` `alias` `privacy` `tpm` |
 | 検索・ツール | `calc` `rate` `tr` `gt` `whois` `ip` `bin` `ids` `dc` `speedtest` / `st` |
 | AI | `ai` `sum` |
-| メッセージ・メディア | `yvlu` `eatgif` `eat` `eat2` `sticker` `t` `ts` `tk` `re` `save` `dme` `da` |
+| メッセージ・メディア | `yvlu` `eatgif` `eat` `eat2` `sticker` `t` `ts` `tk` `re` `save` `dme` `da` `dav` |
 | グループ管理 | `ban` `unban` `kick` `mute` `unmute` `sb` `unsb` `refresh` `aban` |
 | アカウント・権限 | `acn` / `autochangename` `sudo` `sure` |
 
@@ -125,3 +125,5 @@ go vet ./...
 内蔵の `pmcaptcha` は新規インストール時には無効です。`.pmc` でヘルプ、`.pmc on` でルール、`.pmc captcha on` で認証を有効にします。設定と記録は `state/pmcaptcha` に保存します。
 
 TPM によるソースの導入・更新・削除・インポート・置換は一時停止しています。`.tpm ls -v` で一覧、`.tpm s キーワード` で検索、`.tpm ul 名前` で既存の外部ソースを出力できます。内蔵機能は `.update run` で本体と更新します。既存のカスタムソースプラグインは元の実装とソース更新方式を維持します。[詳細](docs/plugins.md)。
+
+WebDAV アーカイブを内蔵しました。メディアに返信して `.dav`、保存済みメッセージで `.dav config`、接続確認は `.dav test`。既存の設定と履歴を引き継ぎます。[WebDAV の説明](docs/webdav.md)（中国語）。

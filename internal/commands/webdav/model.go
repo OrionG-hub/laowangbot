@@ -1,0 +1,87 @@
+// Package webdav archives Telegram media using bounded disk and HTTP streams.
+package webdav
+
+import (
+	"errors"
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
+)
+
+// Config preserves the original plugin configuration format.
+type Config struct {
+	URL        string `json:"url"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	MaxFileMiB int64  `json:"maxFileMiB"`
+}
+
+// Record preserves every original uploads SQLite column, including imported IDs.
+type Record struct {
+	ID         int64  `json:"id"`
+	Date       string `json:"date"`
+	ChatID     string `json:"chat_id"`
+	ChatName   string `json:"chat_name"`
+	MessageID  int    `json:"message_id"`
+	Filename   string `json:"filename"`
+	RemotePath string `json:"remote_path"`
+	Bytes      int64  `json:"bytes"`
+	SHA256     string `json:"sha256"`
+	CreatedAt  string `json:"created_at"`
+	Target     string `json:"target"`
+}
+
+// Records is data/webdav-records.json. Chats maps chat IDs to stable folder names.
+type Records struct {
+	Chats   map[string]string `json:"chats"`
+	Uploads []Record          `json:"uploads"`
+}
+
+func validateConfig(c Config) (Config, error) {
+	u, err := url.Parse(strings.TrimSpace(c.URL))
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return c, errors.New("地址必须为 HTTPS WebDAV 根地址，不带账号、查询参数或片段")
+	}
+	if c.Username == "" || c.Password == "" || strings.ContainsAny(c.Username, ":\r\n") {
+		return c, errors.New("请配置有效用户名和密码")
+	}
+	if c.MaxFileMiB < 0 || c.MaxFileMiB > 4096 {
+		return c, errors.New("文件上限需为 0–4096 MiB，0 表示不限")
+	}
+	c.URL = strings.TrimRight(u.String(), "/")
+	return c, nil
+}
+func safeName(value string, limit int) string {
+	value = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || strings.ContainsRune(`/\:*?"<>|`, r) || (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069) {
+			return '_'
+		}
+		return r
+	}, norm.NFC.String(value))
+	value = strings.TrimRight(strings.TrimLeft(value, "."), ". ")
+	rs := []rune(value)
+	if len(rs) > limit {
+		value = string(rs[:limit])
+	}
+	if value == "" {
+		return "未命名"
+	}
+	return value
+}
+
+var datePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+func validDate(value string) bool {
+	if !datePattern.MatchString(value) {
+		return false
+	}
+	_, err := time.Parse("2006-01-02", value)
+	return err == nil
+}
+func dateKey(now time.Time) string {
+	return now.In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02")
+}

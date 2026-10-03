@@ -97,7 +97,7 @@ bash scripts/install.sh --binary "$PWD/laowangbot" \
 | 配置与插件 | `prefix` `alias` `privacy` `tpm` |
 | 查询工具 | `calc` `rate` `tr` `gt` `whois` `ip` `bin` `ids` `dc` `speedtest` / `st` |
 | AI | `ai` `sum` |
-| 消息与媒体 | `yvlu` `eatgif` `eat` `eat2` `sticker` `t` `ts` `tk` `re` `save` `dme` `da` |
+| 消息与媒体 | `yvlu` `eatgif` `eat` `eat2` `sticker` `t` `ts` `tk` `re` `save` `dme` `da` `dav` |
 | 群管理 | `ban` `unban` `kick` `mute` `unmute` `sb` `unsb` `refresh` `aban` |
 | 账号与授权 | `acn` / `autochangename` `sudo` `sure` |
 
@@ -128,3 +128,5 @@ bash scripts/build.sh
 `pmcaptcha` 私聊验证也已内置，使用 `.pmc` 查看帮助。新安装默认关闭；`.pmc on` 启用规则，`.pmc captcha on` 开启验证码，配置与用户记录保存在 `state/pmcaptcha`。
 
 TPM 源码安装、更新、卸载、导入和替换暂时禁用。`.tpm ls -v` 查看内置及外部插件，`.tpm s 关键词` 搜索，`.tpm ul 名称` 导出已有外部源码。内置插件通过 `.update run` 随主程序更新；已有手动源码插件仍保留原版本及源码更新路径。见[完整说明](docs/plugins.md)。
+
+WebDAV 文件归档已内置，回复媒体发送 `.dav`；使用 `.dav config` 在收藏夹配置、`.dav test` 检查连接。旧配置与上传记录继续使用，详见 [WebDAV 说明](docs/webdav.md)。

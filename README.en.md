@@ -89,7 +89,7 @@ Default prefixes are `.`, `。`, `$`, and `，`; migration preserves custom pref
 | Configuration / plugins | `prefix` `alias` `privacy` `tpm` |
 | Utilities | `calc` `rate` `tr` `gt` `whois` `ip` `bin` `ids` `dc` `speedtest` / `st` |
 | AI | `ai` `sum` |
-| Messages / media | `yvlu` `eatgif` `eat` `eat2` `sticker` `t` `ts` `tk` `re` `save` `dme` `da` |
+| Messages / media | `yvlu` `eatgif` `eat` `eat2` `sticker` `t` `ts` `tk` `re` `save` `dme` `da` `dav` |
 | Moderation | `ban` `unban` `kick` `mute` `unmute` `sb` `unsb` `refresh` `aban` |
 | Account / delegation | `acn` / `autochangename` `sudo` `sure` |
 
@@ -125,3 +125,5 @@ The built-in `bh` account-expiry monitor supports EmbyBoss/custom checks, schedu
 The built-in `pmcaptcha` private-chat verifier is disabled by default on new installations. Use `.pmc` for help, `.pmc on` to enable rules, and `.pmc captcha on` to enable challenges. State is stored in `state/pmcaptcha`.
 
 TPM source installation, updates, removal, import and replacement are temporarily disabled. Use `.tpm ls -v` to inspect plugins, `.tpm s keyword` to search, and `.tpm ul name` to export existing external source. Bundled plugins update with `.update run`; existing custom source plugins retain their implementation and source-update path. See the [guide](docs/plugins.md).
+
+WebDAV archiving is built in: reply to media with `.dav`, configure it in Saved Messages using `.dav config`, and check access with `.dav test`. Existing settings and records are preserved. See [WebDAV](docs/webdav.md) (Chinese).

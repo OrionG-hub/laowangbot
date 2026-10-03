@@ -32,6 +32,7 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/commands/tr"
 	"github.com/OrionG-hub/laowangbot/internal/commands/tts"
 	"github.com/OrionG-hub/laowangbot/internal/commands/update"
+	"github.com/OrionG-hub/laowangbot/internal/commands/webdav"
 	"github.com/OrionG-hub/laowangbot/internal/commands/whois"
 	"github.com/OrionG-hub/laowangbot/internal/commands/yvlu"
 )
@@ -44,6 +45,7 @@ func RegisterAll(a *app.App) {
 	calc.Register(a)
 	rate.Register(a)
 	whois.Register(a)
+	webdav.Register(a)
 	ai.Register(a)
 	gt.Register(a)
 	tr.Register(a)
