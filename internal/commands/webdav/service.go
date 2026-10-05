@@ -210,7 +210,7 @@ func (s *service) configure(ctx context.Context, r *request) error {
 		if c.MaxFileMiB == 0 {
 			limit = "不限（保留本机磁盘保护）"
 		}
-		return r.edit(ctx, "🔐 <b>WebDAV 配置</b>\n地址："+command.Escape(c.URL)+"\n用户名："+command.Escape(c.Username)+"\n密码："+password+"\n上传模式："+command.Escape(mode)+"\nCloudDrive Token："+token+"\nAPI 根路径："+command.Escape(root)+"\n单文件上限："+limit+"\n\n"+command.Code(r.prefix+"dav config url https://example.com/dav")+"\n"+command.Code(r.prefix+"dav config user 用户名")+"\n"+command.Code(r.prefix+"dav config pass 密码")+"\n"+command.Code(r.prefix+"dav config limit 0")+"\n"+command.Code(r.prefix+"dav config cdtoken API令牌")+"\n"+command.Code(r.prefix+"dav config cdroot /")+"\n"+command.Code(r.prefix+"dav config mode clouddrive")+"\nCloudDrive 按80 MiB分片；API根路径需对应WebDAV根目录。\n保存立即生效；凭据经 Telegram 云聊天传输，隐藏命令不能保证清除其他客户端缓存。")
+		return r.edit(ctx, "🔐 <b>WebDAV 配置</b>\n地址："+command.Escape(c.URL)+"\n用户名："+command.Escape(c.Username)+"\n密码："+password+"\n上传模式："+command.Escape(mode)+"\nCloudDrive Token："+token+"\nAPI 根路径："+command.Escape(root)+"\n单文件上限："+limit+"\n\n"+command.Code(r.prefix+"dav config url https://example.com/dav")+"\n"+command.Code(r.prefix+"dav config user 用户名")+"\n"+command.Code(r.prefix+"dav config pass 密码")+"\n"+command.Code(r.prefix+"dav config limit 0")+"\n"+command.Code(r.prefix+"dav config cdtoken API令牌")+"\n"+command.Code(r.prefix+"dav config cdroot /")+"\n"+command.Code(r.prefix+"dav config mode clouddrive")+"\nCloudDrive 按50 MB分片；API根路径需对应WebDAV根目录。\n保存立即生效；凭据经 Telegram 云聊天传输，隐藏命令不能保证清除其他客户端缓存。")
 	}
 	if value == "" {
 		return errors.New("配置值不能为空")
@@ -494,7 +494,7 @@ func (s *service) upload(ctx context.Context, r *request) error {
 			defer cancel()
 			parts := (total + cloudDriveChunkSize - 1) / cloudDriveChunkSize
 			part := min(parts, done/cloudDriveChunkSize+1)
-			phase := fmt.Sprintf("⬆️ CloudDrive 分片：%d/%d · 每片80 MiB\n已确认 %.1f / %.1f MiB", part, parts, float64(done)/(1<<20), float64(total)/(1<<20))
+			phase := fmt.Sprintf("⬆️ CloudDrive 分片：%d/%d · 每片最大50 MB\n已确认 %.1f / %.1f MiB", part, parts, float64(done)/(1<<20), float64(total)/(1<<20))
 			if done == total {
 				phase = "⬆️ 分片写入完成，正在关闭文件并核验归档…"
 			}

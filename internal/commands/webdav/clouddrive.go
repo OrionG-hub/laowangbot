@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
-const cloudDriveChunkSize int64 = 80 << 20
+const cloudDriveChunkSize int64 = 50_000_000
 const cloudDriveResponseLimit = 2 << 20
 
 type cloudDriveClient struct{ dav *davClient }
@@ -70,7 +70,7 @@ func decodeCloudDriveFields(raw []byte) (cloudDriveFields, error) {
 }
 
 // The protobuf prefix and file section stream directly into a single HTTP
-// request. An 80 MiB chunk does not require an 80 MiB client-side buffer.
+// request. A 50 MB chunk does not require a 50 MB client-side buffer.
 func (c cloudDriveClient) rpc(ctx context.Context, method string, payload io.Reader, size int64) (cloudDriveFields, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
