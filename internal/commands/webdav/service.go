@@ -18,6 +18,7 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/bot"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/store"
+	"github.com/gotd/td/tg"
 )
 
 const headroom int64 = 256 << 20
@@ -363,39 +364,22 @@ func (s *service) upload(ctx context.Context, r *request) error {
 		return errors.New("文件超过配置上限")
 	}
 	target := fmt.Sprintf("%x", sha256.Sum256([]byte(c.URL+"\x00"+c.Username)))
-	db, err := s.records.Read()
+	name := r.name(message)
+	d := davClient{c, s.http}
+	_, channel := message.Peer.(*tg.PeerChannel)
+	_, group := message.Peer.(*tg.PeerChat)
+	folder, db, err := s.chatFolder(ctx, &d, message.ChatID, name, target, channel || group)
 	if err != nil {
-		return errors.New("无法读取 WebDAV 记录")
+		return err
+	}
+	if name == "" {
+		name = "会话"
 	}
 	for i := len(db.Uploads) - 1; i >= 0; i-- {
 		row := db.Uploads[i]
 		if row.Target == target && row.ChatID == message.ChatID && row.MessageID == message.ID {
 			return r.edit(ctx, fmt.Sprintf("ℹ️ 此消息已有上传记录 #%d（未重新上传）。\n%s", row.ID, command.Code(row.RemotePath)))
 		}
-	}
-	name := r.name(message)
-	if name == "" {
-		name = "会话"
-	}
-	folder := db.Chats[message.ChatID]
-	if folder == "" {
-		folder = safeName(name, 55) + " (" + message.ChatID + ")"
-	}
-	legacy := "_" + message.ChatID
-	if strings.HasSuffix(folder, legacy) {
-		folder = strings.TrimSuffix(folder, legacy) + " (" + message.ChatID + ")"
-	}
-	if folder == "." || folder == ".." || strings.ContainsAny(folder, "/\\") || strings.ContainsRune(folder, 0) {
-		return errors.New("保存的 WebDAV 会话目录无效")
-	}
-	if err := s.records.Update(func(db *Records) error {
-		if db.Chats == nil {
-			db.Chats = map[string]string{}
-		}
-		db.Chats[message.ChatID] = folder
-		return nil
-	}); err != nil {
-		return errors.New("无法保存 WebDAV 会话目录")
 	}
 	tempRoot := filepath.Join(s.root, "temp")
 	if err := os.MkdirAll(tempRoot, 0700); err != nil {
@@ -474,7 +458,6 @@ func (s *service) upload(ctx context.Context, r *request) error {
 	if err := r.edit(ctx, "⬆️ 正在创建目录并上传 WebDAV…"); err != nil {
 		return err
 	}
-	d := davClient{c, s.http}
 	if err := d.directory(ctx, directory); err != nil {
 		return err
 	}

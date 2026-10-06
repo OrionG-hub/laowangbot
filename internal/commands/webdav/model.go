@@ -39,10 +39,20 @@ type Record struct {
 	Target     string `json:"target"`
 }
 
-// Records is data/webdav-records.json. Chats maps chat IDs to stable folder names.
+// DirectoryRename persists an unfinished remote MOVE until paths are committed.
+type DirectoryRename struct {
+	Target string `json:"target"`
+	ChatID string `json:"chat_id"`
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Name   string `json:"name"`
+}
+
+// Records is data/webdav-records.json. Chats maps chat IDs to current folder names.
 type Records struct {
-	Chats   map[string]string `json:"chats"`
-	Uploads []Record          `json:"uploads"`
+	Chats   map[string]string          `json:"chats"`
+	Uploads []Record                   `json:"uploads"`
+	Renames map[string]DirectoryRename `json:"renames,omitempty"`
 }
 
 func validateConfig(c Config) (Config, error) {
