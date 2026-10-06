@@ -1,7 +1,9 @@
 package webdav
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -170,4 +172,37 @@ func (d *davClient) finish(ctx context.Context, temporary, destination string, b
 		return fmt.Errorf("完成归档失败：HTTP %d；不覆盖已有文件，临时上传已保留", moved.status)
 	}
 	return d.verify(ctx, destination, bytes)
+}
+
+func (d *davClient) contentMatches(ctx context.Context, relative string, size int64, digest []byte) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", d.url(relative), nil)
+	if err != nil {
+		return false, errors.New("WebDAV 校验地址无效")
+	}
+	req.SetBasicAuth(d.config.Username, d.config.Password)
+	req.Header.Set("User-Agent", "Laowangbot-WebDAV/1.0")
+	req.Header.Set("Accept-Encoding", "identity")
+	client := *d.http
+	client.Timeout = time.Hour
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	res, err := client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, errors.New("远端内容校验读取失败，未完成文件已保留")
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return false, fmt.Errorf("远端内容校验失败：HTTP %d；未完成文件已保留", res.StatusCode)
+	}
+	hash := sha256.New()
+	n, err := io.CopyBuffer(hash, io.LimitReader(res.Body, size+1), make([]byte, 64<<10))
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, errors.New("远端内容校验读取失败，未完成文件已保留")
+	}
+	return n == size && bytes.Equal(hash.Sum(nil), digest), nil
 }

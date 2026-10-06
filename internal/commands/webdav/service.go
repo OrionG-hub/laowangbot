@@ -18,7 +18,6 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/bot"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/store"
-	"github.com/google/uuid"
 )
 
 const headroom int64 = 256 << 20
@@ -480,12 +479,15 @@ func (s *service) upload(ctx context.Context, r *request) error {
 	}
 	date := dateKey(s.now())
 	directory := folder + "/" + strings.ReplaceAll(date, "-", "/")
-	destination := fmt.Sprintf("%s/%d_%s_%s", directory, message.ID, uuid.NewString()[:8], basename)
 	if err := r.edit(ctx, "⬆️ 正在创建目录并上传 WebDAV…"); err != nil {
 		return err
 	}
 	d := davClient{c, s.http}
 	if err := d.directory(ctx, directory); err != nil {
+		return err
+	}
+	destination, err := d.destination(ctx, directory, basename, bytes, hash.Sum(nil), target, db.Uploads)
+	if err != nil {
 		return err
 	}
 	if c.UploadMode == "clouddrive" {

@@ -1,16 +1,12 @@
 package webdav
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -78,36 +74,11 @@ func (c cloudDriveClient) upload(ctx context.Context, file, destination string, 
 }
 
 func (c cloudDriveClient) verifyContent(ctx context.Context, relative string, size int64, digest []byte) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", c.dav.url(relative), nil)
+	matches, err := c.dav.contentMatches(ctx, relative, size, digest)
 	if err != nil {
-		return errors.New("WebDAV 校验地址无效")
+		return err
 	}
-	req.SetBasicAuth(c.dav.config.Username, c.dav.config.Password)
-	req.Header.Set("User-Agent", "Laowangbot-WebDAV/1.0")
-	req.Header.Set("Accept-Encoding", "identity")
-	client := *c.dav.http
-	client.Timeout = time.Hour
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	res, err := client.Do(req)
-	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return errors.New("远端内容校验读取失败，未完成文件已保留")
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return fmt.Errorf("远端内容校验失败：HTTP %d；未完成文件已保留", res.StatusCode)
-	}
-	hash := sha256.New()
-	n, err := io.CopyBuffer(hash, io.LimitReader(res.Body, size+1), make([]byte, 64<<10))
-	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return errors.New("远端内容校验读取失败，未完成文件已保留")
-	}
-	if n != size || !bytes.Equal(hash.Sum(nil), digest) {
+	if !matches {
 		return errors.New("远端文件大小或 SHA256 校验失败，不写成功记录；未完成文件已保留")
 	}
 	return nil
