@@ -197,19 +197,11 @@ func (s *service) configure(ctx context.Context, r *request) error {
 		if mode == "" {
 			mode = "webdav"
 		}
-		token := "未设置"
-		if c.CloudDriveToken != "" {
-			token = "已设置（隐藏）"
-		}
-		root := c.CloudDriveRoot
-		if root == "" {
-			root = "/"
-		}
 		limit := fmt.Sprintf("%d MiB", c.MaxFileMiB)
 		if c.MaxFileMiB == 0 {
 			limit = "不限（保留本机磁盘保护）"
 		}
-		return r.edit(ctx, "🔐 <b>WebDAV 配置</b>\n地址："+command.Escape(c.URL)+"\n用户名："+command.Escape(c.Username)+"\n密码："+password+"\n上传模式："+command.Escape(mode)+"\n旧版 Token（HTTP 分片不使用）："+token+"\n旧版 API 根路径（HTTP 分片不使用）："+command.Escape(root)+"\n单文件上限："+limit+"\n\n"+command.Code(r.prefix+"dav config url https://example.com/dav")+"\n"+command.Code(r.prefix+"dav config user 用户名")+"\n"+command.Code(r.prefix+"dav config pass 密码")+"\n"+command.Code(r.prefix+"dav config limit 0")+"\n"+command.Code(r.prefix+"dav config mode clouddrive")+"\nCloudDrive 通过 HTTP 按80 MB分片，仅使用WebDAV账号密码。\n保存立即生效；凭据经 Telegram 云聊天传输，隐藏命令不能保证清除其他客户端缓存。")
+		return r.edit(ctx, "🔐 <b>WebDAV 配置</b>\n地址："+command.Escape(c.URL)+"\n用户名："+command.Escape(c.Username)+"\n密码："+password+"\n上传模式："+command.Escape(mode)+"\n单文件上限："+limit+"\n\n"+command.Code(r.prefix+"dav config url https://example.com/dav")+"\n"+command.Code(r.prefix+"dav config user 用户名")+"\n"+command.Code(r.prefix+"dav config pass 密码")+"\n"+command.Code(r.prefix+"dav config limit 0")+"\n\n"+command.Code(r.prefix+"dav config mode webdav")+"\n普通 WebDAV（默认）：整文件上传，受服务端及 CDN 大小限制。\n"+command.Code(r.prefix+"dav config mode clouddrive")+"\nCloudDrive：HTTP 按 80 MB 分片，需支持分片续写；无需 Token。\n两种模式均使用 WebDAV 账号密码；CDN 需放行 WebDAV 请求并关闭该路径的人机验证。\n"+command.Code(r.prefix+"dav test")+" 只读检查连接。\n保存立即生效；凭据经 Telegram 云聊天传输，隐藏命令不能保证清除其他客户端缓存。")
 	}
 	if value == "" {
 		return errors.New("配置值不能为空")

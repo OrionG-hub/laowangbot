@@ -14,7 +14,7 @@ import (
 
 func help(prefix string) string {
 	p := command.Escape(prefix)
-	return "☁️ <b>WebDAV 文件归档</b>\n回复单条图片、视频、文件：<code>" + p + "dav</code>\n<code>" + p + "dav list</code> 全部记录（每页10条）\n<code>" + p + "dav list YYYY-MM-DD</code> 按上传日期查询\n<code>" + p + "dav next</code> / <code>" + p + "dav prev</code> / <code>" + p + "dav page 3</code>\n列表固定5分钟有效，翻页不续期；每个聊天独立。\n<code>" + p + "dav info 记录ID</code> 查看完整路径\n<code>" + p + "dav test</code> 只读检查连接\n<code>" + p + "dav config</code> 配置方式（仅收藏夹）\n<code>" + p + "dav cancel</code> 取消当前上传\n仅账号本人可用；日期为北京时间，按会话ID固定文件夹名称。"
+	return "☁️ <b>WebDAV 文件归档</b>\n回复单条图片、视频、文件：<code>" + p + "dav</code>\n<code>" + p + "dav list</code> 全部记录（每页10条）\n<code>" + p + "dav list YYYY-MM-DD</code> 按上传日期查询\n<code>" + p + "dav next</code> / <code>" + p + "dav prev</code> / <code>" + p + "dav page 3</code>\n列表固定5分钟有效，翻页不续期；每个聊天独立。\n<code>" + p + "dav info 记录ID</code> 查看完整路径\n<code>" + p + "dav test</code> 只读检查连接\n<code>" + p + "dav config</code> 配置方式（仅收藏夹）\n普通 WebDAV（默认）：整文件上传；CloudDrive：HTTP 按 80 MB 分片，无需 Token。\n在配置面板选择上传模式；普通服务不一定支持分片。\n<code>" + p + "dav cancel</code> 取消当前上传\n仅账号本人可用；日期为北京时间，按会话ID固定文件夹名称。"
 }
 
 var configValue = regexp.MustCompile(`(?s)^\S+\s+config\s+\S+\s+(.+)$`)
