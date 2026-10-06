@@ -62,9 +62,6 @@ func validateConfig(c Config) (Config, error) {
 	if strings.IndexFunc(c.CloudDriveToken, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
 		return c, errors.New("CloudDrive API Token 不能包含空白或控制字符")
 	}
-	if c.UploadMode == "clouddrive" && c.CloudDriveToken == "" {
-		return c, errors.New("请先配置 CloudDrive API Token")
-	}
 	if c.CloudDriveRoot == "" {
 		c.CloudDriveRoot = "/"
 	}

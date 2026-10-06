@@ -125,7 +125,7 @@ func (s *service) handle(ctx context.Context, r *request) error {
 			if err := (cloudDriveClient{&d}).test(test); err != nil {
 				return err
 			}
-			return r.edit(ctx, "✅ WebDAV 与 CloudDrive API 根目录可访问（只读检测；两者必须指向同一目录，实际上传仍需写入和移动权限）")
+			return r.edit(ctx, "✅ WebDAV 根目录可访问，服务端声明支持 HTTP 分片续写（只读检测；实际上传仍需写入、续写和移动权限）")
 		}
 		return r.edit(ctx, "✅ WebDAV 根目录可访问（只读检测；实际上传还需要创建、写入和移动权限）")
 	case "":
@@ -210,7 +210,7 @@ func (s *service) configure(ctx context.Context, r *request) error {
 		if c.MaxFileMiB == 0 {
 			limit = "不限（保留本机磁盘保护）"
 		}
-		return r.edit(ctx, "🔐 <b>WebDAV 配置</b>\n地址："+command.Escape(c.URL)+"\n用户名："+command.Escape(c.Username)+"\n密码："+password+"\n上传模式："+command.Escape(mode)+"\nCloudDrive Token："+token+"\nAPI 根路径："+command.Escape(root)+"\n单文件上限："+limit+"\n\n"+command.Code(r.prefix+"dav config url https://example.com/dav")+"\n"+command.Code(r.prefix+"dav config user 用户名")+"\n"+command.Code(r.prefix+"dav config pass 密码")+"\n"+command.Code(r.prefix+"dav config limit 0")+"\n"+command.Code(r.prefix+"dav config cdtoken API令牌")+"\n"+command.Code(r.prefix+"dav config cdroot /")+"\n"+command.Code(r.prefix+"dav config mode clouddrive")+"\nCloudDrive 按50 MB分片；API根路径需对应WebDAV根目录。\n保存立即生效；凭据经 Telegram 云聊天传输，隐藏命令不能保证清除其他客户端缓存。")
+		return r.edit(ctx, "🔐 <b>WebDAV 配置</b>\n地址："+command.Escape(c.URL)+"\n用户名："+command.Escape(c.Username)+"\n密码："+password+"\n上传模式："+command.Escape(mode)+"\n旧版 Token（HTTP 分片不使用）："+token+"\n旧版 API 根路径（HTTP 分片不使用）："+command.Escape(root)+"\n单文件上限："+limit+"\n\n"+command.Code(r.prefix+"dav config url https://example.com/dav")+"\n"+command.Code(r.prefix+"dav config user 用户名")+"\n"+command.Code(r.prefix+"dav config pass 密码")+"\n"+command.Code(r.prefix+"dav config limit 0")+"\n"+command.Code(r.prefix+"dav config mode clouddrive")+"\nCloudDrive 通过 HTTP 按80 MB分片，仅使用WebDAV账号密码。\n保存立即生效；凭据经 Telegram 云聊天传输，隐藏命令不能保证清除其他客户端缓存。")
 	}
 	if value == "" {
 		return errors.New("配置值不能为空")
@@ -489,14 +489,14 @@ func (s *service) upload(ctx context.Context, r *request) error {
 		return err
 	}
 	if c.UploadMode == "clouddrive" {
-		err = (cloudDriveClient{&d}).upload(ctx, local, destination, bytes, func(done, total int64) {
+		err = (cloudDriveClient{&d}).upload(ctx, local, destination, bytes, hash.Sum(nil), func(done, total int64) {
 			update, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
 			parts := (total + cloudDriveChunkSize - 1) / cloudDriveChunkSize
-			part := min(parts, done/cloudDriveChunkSize+1)
-			phase := fmt.Sprintf("⬆️ CloudDrive 分片：%d/%d · 每片最大50 MB\n已确认 %.1f / %.1f MiB", part, parts, float64(done)/(1<<20), float64(total)/(1<<20))
+			part := min(parts, (done+cloudDriveChunkSize-1)/cloudDriveChunkSize)
+			phase := fmt.Sprintf("⬆️ CloudDrive 分片：%d/%d · 每片最大80 MB\n已确认 %.1f / %.1f MiB", part, parts, float64(done)/(1<<20), float64(total)/(1<<20))
 			if done == total {
-				phase = "⬆️ 分片写入完成，正在关闭文件并核验归档…"
+				phase = fmt.Sprintf("⬆️ 分片写入完成（%d/%d），正在读取远端内容并核验归档…", parts, parts)
 			}
 			_ = r.edit(update, phase)
 		})
@@ -520,7 +520,11 @@ func (s *service) upload(ctx context.Context, r *request) error {
 	}); err != nil {
 		return errors.New("远端已上传并核验，但本地记录保存失败，请检查磁盘；请勿直接重复上传")
 	}
-	if err := r.edit(ctx, fmt.Sprintf("✅ 已上传并核验远端文件大小\n记录 <code>#%d</code> · %.2f MiB\n%s", row.ID, float64(bytes)/(1<<20), command.Code("/"+destination))); err != nil {
+	verified := "远端文件大小"
+	if c.UploadMode == "clouddrive" {
+		verified = "远端文件大小及 SHA256"
+	}
+	if err := r.edit(ctx, fmt.Sprintf("✅ 已上传并核验%s\n记录 <code>#%d</code> · %.2f MiB\n%s", verified, row.ID, float64(bytes)/(1<<20), command.Code("/"+destination))); err != nil {
 		return err
 	}
 	if r.notice != nil {

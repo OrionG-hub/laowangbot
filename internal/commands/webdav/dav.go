@@ -41,13 +41,6 @@ func (d *davClient) url(relative string) string {
 	return result
 }
 func (d *davClient) request(ctx context.Context, method, relative string, headers map[string]string, file string, bytes int64) (response, error) {
-	deadline := 2 * time.Minute
-	// PUT can stream a large file; the enclosing upload still has a one-hour limit.
-	if method == "PUT" {
-		deadline = time.Hour
-	}
-	ctx, cancel := context.WithTimeout(ctx, deadline)
-	defer cancel()
 	var reader io.Reader
 	var source *os.File
 	if file != "" {
@@ -59,6 +52,17 @@ func (d *davClient) request(ctx context.Context, method, relative string, header
 		defer source.Close()
 		reader = source
 	}
+	return d.requestReader(ctx, method, relative, headers, reader, bytes)
+}
+
+func (d *davClient) requestReader(ctx context.Context, method, relative string, headers map[string]string, reader io.Reader, bytes int64) (response, error) {
+	deadline := 2 * time.Minute
+	// Both write methods stream from disk within the enclosing upload deadline.
+	if method == "PUT" || method == "PATCH" {
+		deadline = time.Hour
+	}
+	ctx, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, d.url(relative), reader)
 	if err != nil {
 		return response{}, errors.New("WebDAV 请求地址无效")
@@ -68,7 +72,7 @@ func (d *davClient) request(ctx context.Context, method, relative string, header
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if source != nil {
+	if reader != nil {
 		req.ContentLength = bytes
 	}
 	client := *d.http
@@ -134,7 +138,7 @@ func (d *davClient) upload(ctx context.Context, file, destination string, bytes 
 		return err
 	}
 	if put.status == http.StatusRequestEntityTooLarge {
-		return fmt.Errorf("WebDAV 服务端或中间代理拒绝了上传大小（HTTP 413，%.1f MiB）。请检查上传限制；CloudDrive 可配置 API 分片模式，.dav config limit 0 无法解除服务端限制。远端可能留有 .partial- 文件", float64(bytes)/(1<<20))
+		return fmt.Errorf("WebDAV 服务端或中间代理拒绝了上传大小（HTTP 413，%.1f MiB）。请检查上传限制；CloudDrive 可配置 HTTP 分片模式，.dav config limit 0 无法解除服务端限制。远端可能留有 .partial- 文件", float64(bytes)/(1<<20))
 	}
 	if put.status != 200 && put.status != 201 && put.status != 204 {
 		return fmt.Errorf("上传失败：HTTP %d（未完成文件以 .partial- 标识）", put.status)

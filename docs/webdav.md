@@ -23,28 +23,26 @@ WebDAV 随官方程序内置，更新后直接使用 `.dav`，无需 TPM 安装�
 
 `.dav cancel` 请求取消。远端先写 `.partial-` 临时文件、核验大小、MOVE 到最终路径，再次核验大小后才写成功记录。失败或取消可能留下远端文件；不会自动删除云端内容。大小核验不等于远端 SHA256 校验，记录中的 SHA256 为本地下载文件摘要。
 
-HTTP 413 表示 WebDAV 服务端或中间代理拒绝上传大小；`.dav config limit 0` 无法解除服务端限制。拒绝可能发生在文件到达 CloudDrive 前，不保证远端生成了 `.partial-` 文件。使用 CloudDrive 时可尝试以下 API 分片模式。
+HTTP 413 表示 WebDAV 服务端或中间代理拒绝上传大小；`.dav config limit 0` 无法解除服务端限制。拒绝可能发生在文件到达 CloudDrive 前，不保证远端生成了 `.partial-` 文件。使用 CloudDrive 时可尝试以下 HTTP 分片模式。
 
 ## CloudDrive 经 CDN 分片上传
 
-CloudDrive 的 WebDAV PUT 没有通用分片协议；启用可选 `clouddrive` 模式后，插件改用同一域名的官方 gRPC-Web API：CreateFile → 按偏移 WriteToFile → CloseFile，随后仍通过 WebDAV HEAD → MOVE → HEAD 核验归档。WebDAV 地址和原账号密码保持不变。普通 WebDAV 默认模式不受影响。
+启用 `clouddrive` 模式后，插件使用 WebDAV 的 `sabredav-partialupdate` 扩展：首片 PUT 创建唯一临时文件，后续 PATCH 按 `X-Update-Range` 指定偏移续写。仅使用现有 WebDAV 地址、用户名和密码，不调用 gRPC，也不需要 API Token。旧 `cdtoken`、`cdroot` 配置保留但不参与上传，普通 `webdav` 模式保持整文件 PUT。
 
-在 CloudDrive 管理页面创建 API Token，授予列目录、创建文件、写入和读取权限，根目录限定为 WebDAV 对应目录。不要用 WebDAV 密码替代 API Token。在 Telegram 收藏夹配置：
+在 Telegram 收藏夹配置：
 
 ```text
-.dav config cdtoken 你的API令牌
-.dav config cdroot /
 .dav config mode clouddrive
 .dav test
 ```
 
-`cdroot` 是 API Token 视角下与 WebDAV 根目录对应的绝对路径：若 Token 已将 `/123云盘/WebDAV/Telegram` 映射为根目录，用 `/`；若 API 仍使用全局路径，用 `/123云盘/WebDAV/Telegram`。两者必须指向同一位置；`.dav test` 只验证各自可访问，不能证明目录映射一致。映射错误会使上传后的 WebDAV 大小核验失败，不写成功记录。
+每片最大 **80 MB**（80,000,000 字节），126 MB 文件分两次写入：80 MB + 46 MB。串行从磁盘流式发送，不分配整片内存。首片带 `If-None-Match: *` 防止覆盖，不自动重试不确定的写入。失败保留 `.partial-` 文件。
 
-每片最大 **50 MB**（50,000,000 字节，协议额外开销不足 100 字节），126 MB 文件分三次写入：50 MB + 50 MB + 26 MB。串行从磁盘流式发送，不分配整片内存、不并发上传。进度显示当前片数和服务端已确认字节数。每次写入必须收到完整成功响应且确认字节数一致；网络、写入或关闭失败不自动重试，以免对不确定状态重复操作。失败尝试关闭句柄，保留 `.partial-` 文件。
+上传前 OPTIONS 必须声明 `DAV: sabredav-partialupdate`。完成分片后流式 GET 全部临时文件，对比本地 SHA256 和大小；通过后执行 HEAD → MOVE（禁止覆盖）→ HEAD，再保存成功记录。远端校验会额外下载一次完整文件，计入一小时上传总时限；只能确认 CloudDrive 返回的内容，不能保证已同步到网盘后端。
 
-CDN 必须允许同域名 `/clouddrive.CloudDriveFileSrv/` 的 POST 请求并透传 gRPC-Web，机器人访问不能被人机验证拦截；CloudDrive 自身也必须接受 50 MB 加协议开销的 RPC 消息。减小分片无法绕过更小的 CDN 或服务端消息上限。HTTP 413 或 gRPC 8 等错误仍需要检查服务端限制。关闭文件及 WebDAV 核验仅表示 CloudDrive 可访问该文件，不能保证它已同步到网盘后端。
+CDN 必须放行 WebDAV 路径的 OPTIONS、PROPFIND、MKCOL、PUT、PATCH、GET、HEAD 和 MOVE，透传 `X-Update-Range` 与条件请求头，且不能将机器人请求转到人机验证页面。80 MB 分片只能避开更大的单请求体限制，不能绕过 WAF 或服务端不支持续写的限制。
 
-接口依据 [CloudDrive 官方 API 指南](https://www.clouddrive2.com/api/CloudDrive2_gRPC_API_Guide.html)，未使用 1.1.1 新增的 `uploadImmediately` 字段。CloudDrive 1.1.1 经 Peekabo CDN 的 50 MB 分片实际上传尚未实机验证；本地 TLS 模拟测试不能替代线上验收。可用 `.dav config mode webdav` 切回普通上传。
+已在 CloudDrive 1.1.1 本机直连验证 80 MB PUT + 46 MB PATCH、SHA256、MOVE 和延时读取。Peekabo 域名实测返回 307 跳转到验证码页面，因此经 CDN 的实际上传尚未完成验收。可用 `.dav config mode webdav` 切回普通上传。
 
 ## 查询
 
