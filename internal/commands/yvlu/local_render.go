@@ -8,11 +8,15 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gotd/td/tg"
+	"golang.org/x/image/font/sfnt"
 
 	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/fonts"
+	"github.com/OrionG-hub/laowangbot/internal/httpx"
 	"github.com/OrionG-hub/laowangbot/internal/imaging"
 	"github.com/OrionG-hub/laowangbot/internal/media"
 	"github.com/OrionG-hub/laowangbot/internal/quote/render"
@@ -39,7 +43,7 @@ func (s *yvluService) renderLocal(ctx context.Context, inv *command.Invocation, 
 	for _, item := range payload.Messages {
 		messages = append(messages, toRenderMessage(item, images))
 	}
-	png, err := render.Render(messages, render.Options{Format: payload.Type, BubbleColor: payload.BackgroundColor})
+	png, err := render.Render(messages, render.Options{Format: payload.Type, BubbleColor: payload.BackgroundColor, NameEmojis: s.nameEmojiImages(ctx, messages)})
 	if err != nil {
 		return nil, "", err
 	}
@@ -56,6 +60,80 @@ func (s *yvluService) renderLocal(ctx context.Context, inv *command.Invocation, 
 		return webp, "webp", nil
 	}
 	return png, "png", nil
+}
+
+// nameEmojiImages 给名字类文本（作者名、标签、转发 label、回复名）里的
+// Unicode 表情配图：字体画不出的 emoji 段去 Twemoji 拉图（CC-BY 4.0），
+// 渲染时画成图；下载失败的段没有图，退回按字画（与之前一致）。
+// 成功下载的图常驻内存缓存，同一表情只拉一次。
+var twemojiCache sync.Map // segment string -> image.Image
+
+func (s *yvluService) nameEmojiImages(ctx context.Context, messages []render.Message) map[string]image.Image {
+	out := map[string]image.Image{}
+	collect := func(text string) {
+		for _, seg := range render.EmojiSegments(text) {
+			if _, ok := out[seg]; ok {
+				continue
+			}
+			if !emojiNeedsImage(seg) {
+				continue
+			}
+			if img := s.twemojiImage(ctx, seg); img != nil {
+				out[seg] = img
+			}
+		}
+	}
+	for _, msg := range messages {
+		collect(msg.From.Name)
+		collect(msg.Tag)
+		collect(msg.Forward)
+		if msg.Reply != nil {
+			collect(msg.Reply.Name)
+		}
+	}
+	return out
+}
+
+// emojiNeedsImage 报告某 emoji 段是否需要配图：段里任一字在内嵌字体中
+// 没有字形时需要；纯符号段（如 ★ 本身有字形）走字体路径，不用配图。
+func emojiNeedsImage(segment string) bool {
+	buf := &sfnt.Buffer{}
+	cjk, _ := fonts.CJK()
+	sym, _ := fonts.Symbols()
+	math, _ := fonts.Math()
+	for _, r := range segment {
+		has := false
+		for _, f := range []*sfnt.Font{cjk, sym, math} {
+			if f == nil {
+				continue
+			}
+			if glyph, _ := f.GlyphIndex(buf, r); glyph != 0 {
+				has = true
+				break
+			}
+		}
+		if !has {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *yvluService) twemojiImage(ctx context.Context, segment string) image.Image {
+	if img, ok := twemojiCache.Load(segment); ok {
+		return img.(image.Image)
+	}
+	url := "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/" + render.TwemojiFileName(segment) + ".png"
+	response, err := httpx.Do(ctx, httpx.Request{Method: "GET", URL: url, Timeout: 15 * time.Second, MaxBytes: 1 << 20})
+	if err != nil || !response.OK() {
+		return nil
+	}
+	img, err := imaging.Decode(response.Body)
+	if err != nil {
+		return nil
+	}
+	twemojiCache.Store(segment, img)
+	return img
 }
 
 // toRenderMessage 把远程 payload 的消息换成本地渲染器的输入：

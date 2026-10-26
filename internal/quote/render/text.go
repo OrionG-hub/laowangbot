@@ -388,26 +388,42 @@ func (c *canvas) drawItalicRun(x, yTop int, ln line, run []cell, runWidth int, s
 
 // drawRunes 在 img 的 (x, baseline) 处逐字画一串字；bold 时横向双画
 // （第二遍必须回到原 Dot 再 +1px，不能用 DrawString 推进后的 Dot）。
+// 有对应图片的 emoji 段整段画成图（与字号等高，底部略低于基线），
+// 没有图片的段退回按字画（有字形的字正常画，没有的跳过）。
 func (c *canvas) drawRunes(img *image.RGBA, text string, x, baseline int, sizePx float64, tint color.RGBA, bold bool) {
 	cursor := x
-	for _, r := range text {
-		if !c.hasGlyph(r) {
-			// 两种字体都没有的字形（常见于名字里的彩色 emoji）不画方框，
-			// 直接跳过，与 measure 的零宽行为一致。
-			continue
+	for _, seg := range splitSegments(text) {
+		if seg.emoji {
+			if emojiImg, ok := c.nameEmojis[seg.text]; ok {
+				size := int(sizePx + 0.5)
+				if size < 1 {
+					size = 1
+				}
+				fitted := fitImage(emojiImg, size, size)
+				bounds := fitted.Bounds()
+				bottom := baseline + int(sizePx*0.2)
+				drawImageAt(img, fitted, cursor, bottom-bounds.Dy())
+				cursor += size
+				continue
+			}
 		}
-		face := c.faceForRune(sizePx, r)
-		if face == nil {
-			continue
-		}
-		dot := fixed.Point26_6{X: fixed.I(cursor), Y: fixed.I(baseline)}
-		drawer := font.Drawer{Dst: img, Src: image.NewUniform(tint), Face: face, Dot: dot}
-		drawer.DrawString(string(r))
-		if bold {
-			drawer.Dot = dot
-			drawer.Dot.X += fixed.I(1)
+		for _, r := range seg.text {
+			if !c.hasGlyph(r) {
+				continue
+			}
+			face := c.faceForRune(sizePx, r)
+			if face == nil {
+				continue
+			}
+			dot := fixed.Point26_6{X: fixed.I(cursor), Y: fixed.I(baseline)}
+			drawer := font.Drawer{Dst: img, Src: image.NewUniform(tint), Face: face, Dot: dot}
 			drawer.DrawString(string(r))
+			if bold {
+				drawer.Dot = dot
+				drawer.Dot.X += fixed.I(1)
+				drawer.DrawString(string(r))
+			}
+			cursor += c.measure(string(r), sizePx)
 		}
-		cursor += c.measure(string(r), sizePx)
 	}
 }

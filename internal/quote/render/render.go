@@ -18,6 +18,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"strings"
 
 	"github.com/OrionG-hub/laowangbot/internal/fonts"
 	"golang.org/x/image/font"
@@ -75,6 +76,9 @@ type Options struct {
 	BubbleColor string
 	// Scale 是输出倍率，默认 2（与原来远程 payload 的 Scale 一致）。
 	Scale int
+	// NameEmojis 是名字类文本（作者名、标签、转发 label、回复名）里
+	// emoji 段对应的图，键为 emoji 段原文；没有图的段退回按字画。
+	NameEmojis map[string]image.Image
 }
 
 // 以下尺寸都是逻辑单位，实际输出像素 = 逻辑单位 × Scale。
@@ -154,13 +158,14 @@ type faceKey struct {
 
 // canvas 是渲染中的画布与字体缓存。
 type canvas struct {
-	img   *image.RGBA
-	scale int
-	cjk   *sfnt.Font
-	sym   *sfnt.Font
-	math  *sfnt.Font
-	buf   *sfnt.Buffer
-	faces map[faceKey]font.Face
+	img        *image.RGBA
+	scale      int
+	cjk        *sfnt.Font
+	sym        *sfnt.Font
+	math       *sfnt.Font
+	buf        *sfnt.Buffer
+	faces      map[faceKey]font.Face
+	nameEmojis map[string]image.Image
 }
 
 func (c *canvas) faceFor(size float64, idx int) font.Face {
@@ -220,14 +225,23 @@ func (c *canvas) hasGlyph(r rune) bool {
 }
 
 // measure 是字符串的像素宽（逐字 fallback 字体，忽略 kerning；三种字体都
-// 没有的字形不占宽，与 drawRunes 的跳过行为一致）。
+// 没有的字形不占宽，与 drawRunes 的跳过行为一致；有对应图片的 emoji 段
+// 按图片宽（字号）计）。
 func (c *canvas) measure(text string, size float64) int {
 	width := fixed.Int26_6(0)
-	for _, r := range text {
-		if !c.hasGlyph(r) {
-			continue
+	for _, seg := range splitSegments(text) {
+		if seg.emoji {
+			if _, ok := c.nameEmojis[seg.text]; ok {
+				width += fixed.I(int(size + 0.5))
+				continue
+			}
 		}
-		width += font.MeasureString(c.faceForRune(size, r), string(r))
+		for _, r := range seg.text {
+			if !c.hasGlyph(r) {
+				continue
+			}
+			width += font.MeasureString(c.faceForRune(size, r), string(r))
+		}
 	}
 	return width.Round()
 }
@@ -266,7 +280,7 @@ func Render(messages []Message, opts Options) ([]byte, error) {
 	maxBubblePx := maxW * scale
 	innerMax := maxBubblePx - 2*padX*scale
 
-	c := &canvas{scale: scale, cjk: cjk, sym: sym, math: math, buf: &sfnt.Buffer{}, faces: map[faceKey]font.Face{}}
+	c := &canvas{scale: scale, cjk: cjk, sym: sym, math: math, buf: &sfnt.Buffer{}, faces: map[faceKey]font.Face{}, nameEmojis: opts.NameEmojis}
 	blocks := make([]*block, 0, len(messages))
 	maxBlockW := 0
 	totalH := 0
@@ -333,20 +347,43 @@ type replyBlock struct {
 }
 
 // truncateName 把名字截到 maxW 内，放不下加省略号。
+// truncateName 把名字截到 maxW 内，放不下加省略号；emoji 段整段取舍，
+// 不从序列中间截断。
 func (c *canvas) truncateName(name string, maxW int, sizePx float64) string {
 	if c.measure(name, sizePx) <= maxW {
 		return name
 	}
-	ellipsis := c.measure("…", sizePx)
-	runes := []rune(name)
-	for len(runes) > 0 && c.measure(string(runes)+"…", sizePx) > maxW {
-		runes = runes[:len(runes)-1]
+	var out strings.Builder
+	truncated := false
+	for _, seg := range splitSegments(name) {
+		if seg.emoji {
+			if c.measure(out.String()+seg.text+"…", sizePx) > maxW {
+				truncated = true
+				break
+			}
+			out.WriteString(seg.text)
+			continue
+		}
+		cut := false
+		for _, r := range seg.text {
+			if c.measure(out.String()+string(r)+"…", sizePx) > maxW {
+				truncated = true
+				cut = true
+				break
+			}
+			out.WriteRune(r)
+		}
+		if cut {
+			break
+		}
 	}
-	if len(runes) == 0 {
+	if out.Len() == 0 {
 		return "…"
 	}
-	_ = ellipsis
-	return string(runes) + "…"
+	if truncated {
+		return out.String() + "…"
+	}
+	return out.String()
 }
 
 // layoutMessage 排一条消息的版：先按最宽换行，再按实际内容收窄气泡。
