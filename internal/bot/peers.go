@@ -169,9 +169,20 @@ func (c *PeerCache) rememberUser(user *tg.User) {
 		}
 	}
 	if status, ok := user.GetEmojiStatus(); ok {
-		if value, ok := status.(*tg.EmojiStatus); ok && value.DocumentID != 0 {
-			info.EmojiStatus = strconv.FormatInt(value.DocumentID, 10)
+		info.EmojiStatus = ""
+		var documentID int64
+		switch value := status.(type) {
+		case *tg.EmojiStatus:
+			documentID = value.DocumentID
+		case *tg.EmojiStatusCollectible:
+			documentID = value.DocumentID
 		}
+		if documentID != 0 {
+			info.EmojiStatus = strconv.FormatInt(documentID, 10)
+		}
+	} else if !user.Min {
+		// 完整资料未携带状态表示已取消；min 实体缺字段不能清除缓存。
+		info.EmojiStatus = ""
 	}
 	if user.AccessHash != 0 && !user.Min {
 		info.Hash, info.HasHash = user.AccessHash, true

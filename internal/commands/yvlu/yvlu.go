@@ -694,6 +694,7 @@ func (s *yvluService) build(ctx context.Context, inv *command.Invocation, reply 
 	}
 
 	avatars := map[int64]*quotePhot{}
+	authors := map[int64]quoteFrom{}
 	previous := int64(-1)
 	for index, message := range messages {
 		if err := ctx.Err(); err != nil {
@@ -703,6 +704,7 @@ func (s *yvluService) build(ctx context.Context, inv *command.Invocation, reply 
 		if err != nil {
 			return nil, err
 		}
+		author = refreshUserAuthor(ctx, inv, author, face, authors)
 		show := author.ID != previous
 		previous = author.ID
 		if show {
@@ -712,9 +714,6 @@ func (s *yvluService) build(ctx context.Context, inv *command.Invocation, reply 
 				avatars[author.ID] = photo
 			}
 			author.Photo = photo
-			if info, known := inv.Client.Peers().User(author.ID); known && info.EmojiStatus != "" {
-				author.EmojiStatus = info.EmojiStatus
-			}
 		} else {
 			author.Name, author.FirstName, author.LastName, author.Username, author.EmojiStatus = "", "", "", "", ""
 		}
@@ -868,7 +867,39 @@ func userAuthor(id int64, info bot.UserInfo) *quoteFrom {
 	if name == "" {
 		name = info.Username
 	}
-	return &quoteFrom{ID: id, FirstName: info.FirstName, LastName: info.LastName, Username: info.Username, Name: name}
+	return &quoteFrom{ID: id, FirstName: info.FirstName, LastName: info.LastName, Username: info.Username, Name: name, EmojiStatus: info.EmojiStatus}
+}
+
+// refreshUserAuthor 每次生成只补取一次各作者的完整资料，避免旧缓存丢失
+// 新昵称后缀或状态。请求失败沿用已有资料，不影响语录生成。
+func refreshUserAuthor(ctx context.Context, inv *command.Invocation, from *quoteFrom, peer tg.InputPeerClass, authors map[int64]quoteFrom) *quoteFrom {
+	var user tg.InputUserClass
+	switch value := peer.(type) {
+	case *tg.InputPeerUser:
+		user = &tg.InputUser{UserID: value.UserID, AccessHash: value.AccessHash}
+	case *tg.InputPeerSelf:
+		user = &tg.InputUserSelf{}
+	default:
+		// 匿名转发和频道不按用户 ID 查询，避免同号实体混用状态。
+		return from
+	}
+	if cached, ok := authors[from.ID]; ok {
+		return &cached
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if users, err := inv.Client.API().UsersGetUsers(ctx, []tg.InputUserClass{user}); err == nil {
+		for _, entry := range users {
+			if fresh, ok := entry.(*tg.User); ok && fresh.ID == from.ID && !fresh.Min {
+				inv.Client.Peers().RememberUsers([]tg.UserClass{fresh})
+				info, _ := inv.Client.Peers().User(from.ID)
+				from = userAuthor(from.ID, info)
+				break
+			}
+		}
+	}
+	authors[from.ID] = *from
+	return from
 }
 
 // fakeAuthor 查出 u/ur 指定的伪造发送者的名字。
@@ -889,7 +920,9 @@ func fakeAuthor(ctx context.Context, inv *command.Invocation, peer tg.InputPeerC
 				}
 			}
 		}
-		return userAuthor(self.ID, bot.UserInfo{FirstName: self.FirstName, LastName: self.LastName, Username: self.Username}), nil
+		info, _ := peers.User(self.ID)
+		info.FirstName, info.LastName, info.Username = self.FirstName, self.LastName, self.Username
+		return userAuthor(self.ID, info), nil
 	case *tg.InputPeerUser:
 		if _, known := peers.User(value.UserID); !known {
 			users, err := api.UsersGetUsers(ctx, []tg.InputUserClass{&tg.InputUser{UserID: value.UserID, AccessHash: value.AccessHash}})
