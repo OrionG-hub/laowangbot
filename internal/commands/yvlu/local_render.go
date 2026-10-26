@@ -75,6 +75,10 @@ func (s *yvluService) nameEmojiImages(ctx context.Context, messages []render.Mes
 			if _, ok := out[seg]; ok {
 				continue
 			}
+			// 苹果 logo 由渲染器内嵌 mask 画，不走 Twemoji（图库没有它）。
+			if seg == render.AppleLogo {
+				continue
+			}
 			if !emojiNeedsImage(seg) {
 				continue
 			}

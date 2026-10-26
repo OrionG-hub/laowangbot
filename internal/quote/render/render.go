@@ -14,11 +14,13 @@ package render
 
 import (
 	"bytes"
+	_ "embed"
 	"errors"
 	"image"
 	"image/color"
 	"image/png"
 	"strings"
+	"sync"
 
 	"github.com/OrionG-hub/laowangbot/internal/fonts"
 	"golang.org/x/image/font"
@@ -67,7 +69,19 @@ type Message struct {
 	TagRole    string
 }
 
-// Options 是渲染选项。
+//go:embed apple.png
+var applePNG []byte
+
+// appleMask 是内嵌的苹果 logo mask（Simple Icons，CC0）：黑色剪影、
+// 透明底，alpha 即覆盖率；画名字时按名字颜色着色。
+var appleMask = sync.OnceValue(func() image.Image {
+	img, err := png.Decode(bytes.NewReader(applePNG))
+	if err != nil {
+		return nil
+	}
+	return img
+})
+
 type Options struct {
 	// Format 是 "quote"（贴纸）、"image"（卡片）或 "stories"（故事卡）：
 	// stories 的气泡更窄，其余相同。
@@ -231,6 +245,11 @@ func (c *canvas) measure(text string, size float64) int {
 	width := fixed.Int26_6(0)
 	for _, seg := range splitSegments(text) {
 		if seg.emoji {
+			if seg.text == AppleLogo {
+				// 苹果 logo 用内嵌 mask 画，按字号占宽。
+				width += fixed.I(int(size + 0.5))
+				continue
+			}
 			if _, ok := c.nameEmojis[seg.text]; ok {
 				width += fixed.I(int(size + 0.5))
 				continue

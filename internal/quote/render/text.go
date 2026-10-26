@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 
+	"golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
@@ -389,16 +390,29 @@ func (c *canvas) drawItalicRun(x, yTop int, ln line, run []cell, runWidth int, s
 // drawRunes 在 img 的 (x, baseline) 处逐字画一串字；bold 时横向双画
 // （第二遍必须回到原 Dot 再 +1px，不能用 DrawString 推进后的 Dot）。
 // 有对应图片的 emoji 段整段画成图（与字号等高，底部略低于基线），
-// 没有图片的段退回按字画（有字形的字正常画，没有的跳过）。
+// 苹果 logo 段用内嵌 mask 按当前 tint 着色画（客户端里它就是按名字
+// 颜色显示的单色字形），没有图片的段退回按字画（有字形的字正常画，
+// 没有的跳过）。
 func (c *canvas) drawRunes(img *image.RGBA, text string, x, baseline int, sizePx float64, tint color.RGBA, bold bool) {
 	cursor := x
 	for _, seg := range splitSegments(text) {
 		if seg.emoji {
-			if emojiImg, ok := c.nameEmojis[seg.text]; ok {
-				size := int(sizePx + 0.5)
-				if size < 1 {
-					size = 1
+			size := int(sizePx + 0.5)
+			if size < 1 {
+				size = 1
+			}
+			if seg.text == AppleLogo {
+				if mask := appleMask(); mask != nil {
+					fitted := fitImage(mask, size, size)
+					bounds := fitted.Bounds()
+					bottom := baseline + int(sizePx*0.2)
+					rect := image.Rect(cursor, bottom-bounds.Dy(), cursor+bounds.Dx(), bottom)
+					draw.DrawMask(img, rect, image.NewUniform(tint), image.Point{}, fitted, bounds.Min, draw.Over)
+					cursor += size
+					continue
 				}
+				// 内嵌 mask 解码失败时退回按字画（无字形则跳过）。
+			} else if emojiImg, ok := c.nameEmojis[seg.text]; ok {
 				fitted := fitImage(emojiImg, size, size)
 				bounds := fitted.Bounds()
 				bottom := baseline + int(sizePx*0.2)

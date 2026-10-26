@@ -23,6 +23,12 @@ const (
 	keycap = '\u20E3'
 )
 
+// AppleLogo 是苹果 logo 的私有区字符 U+F8FF：客户端（尤其苹果设备）
+// 会把它画成苹果标志，但它不是标准 emoji，Twemoji 等图库没有它，内嵌
+// 字体也没有它的字形。渲染器内嵌了 Simple Icons（CC0）的苹果标志作
+// mask，画名字时按名字颜色着色，不走 Twemoji 下载。
+const AppleLogo = "\uf8ff"
+
 func isEmojiBase(r rune) bool {
 	switch {
 	case r >= 0x1F000 && r <= 0x1FAFF:
@@ -53,6 +59,10 @@ func isKeycapBase(r rune) bool {
 // 不是 emoji 序列时返回 "", 0。
 func emojiSequenceAt(runes []rune, i int) (string, int) {
 	r := runes[i]
+	// 苹果 logo：单个私有区字符，整段画内嵌 mask。
+	if r == '\uF8FF' {
+		return string(r), 1
+	}
 	// 旗帜：两个区域指示符成一对。
 	if isRegionalIndicator(r) {
 		if i+1 < len(runes) && isRegionalIndicator(runes[i+1]) {
