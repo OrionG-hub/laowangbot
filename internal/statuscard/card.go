@@ -1,12 +1,11 @@
 // Package statuscard 画 .status 的状态卡片：1600×900 的 PNG，布局和配色照 MiBox v2 的
 // status-card。只用 golang.org/x/image 的矢量光栅和字体渲染，不引入别的依赖；
 // 字体是 v2 附带的 Noto Sans SC 子集，另配 Noto Sans Symbols 2 补齐用户品牌里的
-// 中文和 emoji（均为 SIL OFL 1.1，许可证见 NotoSansSC-OFL.txt）。卡片只在 .status 时画，画完就丢。
+// 中文和 emoji（均为 SIL OFL 1.1，许可证见 internal/fonts）。卡片只在 .status 时画，画完就丢。
 package statuscard
 
 import (
 	"bytes"
-	_ "embed"
 	"fmt"
 	"image"
 	"image/color"
@@ -16,18 +15,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OrionG-hub/laowangbot/internal/fonts"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
 	"golang.org/x/image/vector"
 )
-
-//go:embed NotoSansCJKsc-Regular.otf
-var fontData []byte
-
-//go:embed NotoSansSymbols2-Regular.ttf
-var symbolFontData []byte
 
 const (
 	width  = 1600
@@ -61,9 +55,9 @@ var (
 
 func loadFont() (*sfnt.Font, error) {
 	parseOnce.Do(func() {
-		parsed, parseError = opentype.Parse(fontData)
+		parsed, parseError = fonts.CJK()
 		if parseError == nil {
-			symbols, parseError = opentype.Parse(symbolFontData)
+			symbols, parseError = fonts.Symbols()
 		}
 	})
 	return parsed, parseError
