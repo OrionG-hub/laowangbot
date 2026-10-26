@@ -1334,15 +1334,64 @@ func forwardLabel(inv *command.Invocation, message *bot.Message) *quoteFwd {
 	return &quoteFwd{Label: label}
 }
 
-// senderTag 读取作者在本群的管理员头衔。
-//
-// 渲染出的语录靠它把 "群主" 或自定义头衔和普通成员区分开；
-// 只有频道和超级群才有这个信息。
+func participantTag(participant any) string {
+	switch value := participant.(type) {
+	case *tg.ChatParticipant:
+		return strings.TrimSpace(value.Rank)
+	case *tg.ChatParticipantAdmin:
+		if tag := strings.TrimSpace(value.Rank); tag != "" {
+			return tag
+		}
+		return "管理员"
+	case *tg.ChatParticipantCreator:
+		if tag := strings.TrimSpace(value.Rank); tag != "" {
+			return tag
+		}
+		return "群主"
+	case *tg.ChannelParticipant:
+		return strings.TrimSpace(value.Rank)
+	case *tg.ChannelParticipantSelf:
+		return strings.TrimSpace(value.Rank)
+	case *tg.ChannelParticipantAdmin:
+		if tag := strings.TrimSpace(value.Rank); tag != "" {
+			return tag
+		}
+		return "管理员"
+	case *tg.ChannelParticipantCreator:
+		if tag := strings.TrimSpace(value.Rank); tag != "" {
+			return tag
+		}
+		return "群主"
+	}
+	return ""
+}
+
+// senderTag 读取作者在本群的管理员头衔或成员标签。
 func (s *yvluService) senderTag(ctx context.Context, inv *command.Invocation, message *bot.Message, authorID int64) string {
 	ctx, cancel := context.WithTimeout(ctx, tagBudget)
 	defer cancel()
 	chat, err := inv.Client.InputPeer(message.Peer)
 	if err != nil {
+		return ""
+	}
+	if group, ok := chat.(*tg.InputPeerChat); ok {
+		full, err := inv.Client.API().MessagesGetFullChat(ctx, group.ChatID)
+		if err != nil {
+			return ""
+		}
+		info, ok := full.FullChat.(*tg.ChatFull)
+		if !ok {
+			return ""
+		}
+		members, ok := info.Participants.(*tg.ChatParticipants)
+		if !ok {
+			return ""
+		}
+		for _, member := range members.Participants {
+			if member.GetUserID() == authorID {
+				return participantTag(member)
+			}
+		}
 		return ""
 	}
 	channel, ok := bot.InputChannel(chat)
@@ -1358,11 +1407,5 @@ func (s *yvluService) senderTag(ctx context.Context, inv *command.Invocation, me
 		return ""
 	}
 	inv.Client.Peers().RememberUsers(result.Users)
-	switch value := result.Participant.(type) {
-	case *tg.ChannelParticipantCreator:
-		return strings.TrimSpace(value.Rank)
-	case *tg.ChannelParticipantAdmin:
-		return strings.TrimSpace(value.Rank)
-	}
-	return ""
+	return participantTag(result.Participant)
 }
