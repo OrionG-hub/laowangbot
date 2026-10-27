@@ -829,13 +829,16 @@ func (s *yvluService) following(ctx context.Context, inv *command.Invocation, re
 	return ordered, nil
 }
 
-// author 使用当前聊天实际发送者的名字和头像；转发消息同样显示转发者。
+// author 使用消息作者的名字和头像；转发消息使用被转发的原作者。
 // 显式伪造作者选项优先，没有可用头像时返回 nil。
 func (s *yvluService) author(inv *command.Invocation, message *bot.Message, options *yvluOptions) (*quoteFrom, tg.InputPeerClass, error) {
 	if options.FakeAuthor != nil {
 		// 每条消息各拿一份副本：build 会就地清空名字、填上头像。
 		from := *options.FakeAuthor
 		return &from, options.FakeSender, nil
+	}
+	if from, origin := forwardAuthor(inv, message); from != nil {
+		return from, inputPeer(inv, origin), nil
 	}
 	from := peerAuthor(inv, message.Sender)
 	if from == nil {
