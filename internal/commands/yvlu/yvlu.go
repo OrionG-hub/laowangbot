@@ -746,7 +746,7 @@ func (s *yvluService) build(ctx context.Context, inv *command.Invocation, reply 
 		case index == 0 && inv.Message.QuoteText != "":
 			// 操作者回复的是消息的一部分而不是全部。引用整条消息，
 			// 就无视了对方有意缩小的范围，所以文字以选中的部分为准；
-			// 媒体、转发来源和头衔仍属于这条消息，照样带上。
+			// 媒体和头衔仍属于这条消息，照样带上。
 			item.Text = inv.Message.QuoteText
 			item.Entities = convertEntities(inv.Message.QuoteEntities, 0)
 		default:
@@ -757,14 +757,11 @@ func (s *yvluService) build(ctx context.Context, inv *command.Invocation, reply 
 				}
 			}
 		}
-		// 伪造的文字不是这条消息说的，它的媒体和转发来源也就不该出现；
+		// 伪造的文字不是这条消息说的，它的媒体也就不该出现；
 		// 头衔属于作者，和原插件一样照样显示。
 		if !fake {
 			if err := s.describeMedia(ctx, inv, message, &item); err != nil {
 				return nil, err
-			}
-			if label := forwardLabel(inv, message); label != nil {
-				item.Forward = label
 			}
 		}
 		if tag, role := s.senderTag(ctx, inv, message, author.ID); tag != "" {
@@ -832,19 +829,13 @@ func (s *yvluService) following(ctx context.Context, inv *command.Invocation, re
 	return ordered, nil
 }
 
-// author 确定一条被引用的消息该算在谁名下，同时给出该用谁的头像（没有可用头像时为 nil）。
-//
-// 转发的消息算在原作者名下，而不是转发者：引用一条转发消息，
-// 却在上面看到转发者的名字，就等于把话安到了别人头上。头像跟着署名走：
-// 名字是原作者、头像却是转发者，一样是张冠李戴。
+// author 使用当前聊天实际发送者的名字和头像；转发消息同样显示转发者。
+// 显式伪造作者选项优先，没有可用头像时返回 nil。
 func (s *yvluService) author(inv *command.Invocation, message *bot.Message, options *yvluOptions) (*quoteFrom, tg.InputPeerClass, error) {
 	if options.FakeAuthor != nil {
 		// 每条消息各拿一份副本：build 会就地清空名字、填上头像。
 		from := *options.FakeAuthor
 		return &from, options.FakeSender, nil
-	}
-	if from, origin := forwardAuthor(inv, message); from != nil {
-		return from, inputPeer(inv, origin), nil
 	}
 	from := peerAuthor(inv, message.Sender)
 	if from == nil {

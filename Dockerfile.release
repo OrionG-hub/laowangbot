@@ -1,0 +1,10 @@
+# syntax=docker/dockerfile:1
+# Release-only image: reuses the exact checksummed installer binaries.
+FROM debian:bookworm-slim
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata ffmpeg && rm -rf /var/lib/apt/lists/*
+COPY --chmod=755 dist/laowangbot-linux-${TARGETARCH} /usr/local/bin/laowangbot
+WORKDIR /data
+VOLUME /data
+ENTRYPOINT ["laowangbot"]
+CMD ["--supervise", "--root", "/data"]

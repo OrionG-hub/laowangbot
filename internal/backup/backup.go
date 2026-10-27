@@ -108,26 +108,47 @@ func Create(root, version string, now time.Time) ([]byte, []string, error) {
 		return nil, nil, errors.New("nothing to back up: no account or command/plugin configuration here")
 	}
 	sort.Strings(names)
+	if len(names)+1 > maxEntries {
+		return nil, nil, errors.New("too many configuration files to restore from one backup")
+	}
 
 	var archive bytes.Buffer
 	zipped := gzip.NewWriter(&archive)
-	packed := tar.NewWriter(zipped)
+	packed := tar.NewWriter(&archiveBudgetWriter{dst: zipped, remaining: maxTotal})
 	head, err := json.MarshalIndent(manifest{Format: format, Version: version, Created: now.UTC(), Files: names}, "", "  ")
 	if err != nil {
 		return nil, nil, err
 	}
+	// Include TAR headers, padding and end blocks in the same uncompressed
+	// budget enforced by Restore, so Create never emits an unusable archive.
+	total := int64(512 + (len(head)+511)/512*512 + 1024)
 	if err := put(packed, Manifest, head, now); err != nil {
 		return nil, nil, err
 	}
 	for _, name := range names {
 		full := filepath.Join(root, filepath.FromSlash(name))
-		body, err := os.ReadFile(full)
-		if err != nil {
-			return nil, nil, err
-		}
 		info, err := os.Stat(full)
 		if err != nil {
 			return nil, nil, err
+		}
+		if !info.Mode().IsRegular() || info.Size() > maxTotal || total+512+(info.Size()+511)/512*512 >= maxTotal {
+			return nil, nil, errors.New("configuration exceeds the backup restore limit")
+		}
+		file, err := os.Open(full)
+		if err != nil {
+			return nil, nil, err
+		}
+		body, err := io.ReadAll(io.LimitReader(file, int64(maxTotal)-total))
+		closeErr := file.Close()
+		if err != nil {
+			return nil, nil, err
+		}
+		if closeErr != nil {
+			return nil, nil, closeErr
+		}
+		total += 512 + int64((len(body)+511)/512*512)
+		if total >= maxTotal {
+			return nil, nil, errors.New("configuration exceeds the backup restore limit")
 		}
 		if err := put(packed, name, body, info.ModTime()); err != nil {
 			return nil, nil, err
@@ -140,6 +161,21 @@ func Create(root, version string, now time.Time) ([]byte, []string, error) {
 		return nil, nil, err
 	}
 	return archive.Bytes(), names, nil
+}
+
+// Enforce the actual TAR stream limit too: PAX metadata can add extra blocks.
+type archiveBudgetWriter struct {
+	dst       io.Writer
+	remaining int
+}
+
+func (w *archiveBudgetWriter) Write(p []byte) (int, error) {
+	if len(p) > w.remaining {
+		return 0, errors.New("configuration exceeds the backup restore limit")
+	}
+	n, err := w.dst.Write(p)
+	w.remaining -= n
+	return n, err
 }
 
 func put(packed *tar.Writer, name string, body []byte, stamp time.Time) error {

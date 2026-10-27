@@ -205,8 +205,11 @@ func (r *dmeRun) retry(fn func() error) error {
 }
 func (r *dmeRun) own(m *tg.Message, strict bool) bool {
 	from, ok := m.GetFromID()
+	if !ok {
+		return !strict && m.Out
+	}
 	u, isUser := from.(*tg.PeerUser)
-	return (ok && isUser && u.UserID == r.client.SelfID()) || (!strict && m.Out)
+	return isUser && u.UserID == r.client.SelfID()
 }
 func (r *dmeRun) eligible(m *tg.Message, peerID string, strict bool) bool {
 	if m.ID <= 0 || bot.PeerID(m.PeerID) != peerID || !r.own(m, strict) {
@@ -412,7 +415,7 @@ func (r *dmeRun) album(reply *tg.Message) error {
 // Stream history using a strictly descending cursor; memory never grows with count.
 func (r *dmeRun) stream(count, start int, strict bool) error {
 	unlimited := strict || count == 999999
-	offset, empty, selected := r.inv.Message.ID, 0, 0
+	offset, selected := r.inv.Message.ID, 0
 	for unlimited || selected < count {
 		page, err := r.history(r.peer, offset, min(100, r.cfg.SearchLimit), r.inv.Message.ID, max(0, start-1))
 		if err != nil {
@@ -444,17 +447,11 @@ func (r *dmeRun) stream(count, start int, strict bool) error {
 		}
 		offset = next
 		sort.Slice(batch, func(i, j int) bool { return batch[i].ID > batch[j].ID })
-		if len(batch) == 0 {
-			empty++
-		} else {
-			empty = 0
+		if len(batch) > 0 {
 			selected += len(batch)
 			if err := r.process(r.peer, batch); err != nil {
 				return err
 			}
-		}
-		if !strict && empty >= 3 {
-			break
 		}
 		if start > 0 && offset <= start {
 			break

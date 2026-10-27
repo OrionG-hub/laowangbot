@@ -242,6 +242,10 @@ func (c *canvas) hasGlyph(r rune) bool {
 // 没有的字形不占宽，与 drawRunes 的跳过行为一致；有对应图片的 emoji 段
 // 按图片宽（字号）计）。
 func (c *canvas) measure(text string, size float64) int {
+	return c.measureWidth(text, size).Round()
+}
+
+func (c *canvas) measureWidth(text string, size float64) fixed.Int26_6 {
 	width := fixed.Int26_6(0)
 	for _, seg := range splitSegments(text) {
 		if seg.emoji {
@@ -262,7 +266,7 @@ func (c *canvas) measure(text string, size float64) int {
 			width += font.MeasureString(c.faceForRune(size, r), string(r))
 		}
 	}
-	return width.Round()
+	return width
 }
 
 // lineThickness 是下划线/删除线的粗细（输出像素）。
@@ -394,24 +398,30 @@ func (c *canvas) truncateName(name string, maxW int, sizePx float64) string {
 		return name
 	}
 	var out strings.Builder
+	width := fixed.Int26_6(0)
+	ellipsis := c.measureWidth("…", sizePx)
 	truncated := false
 	for _, seg := range splitSegments(name) {
 		if seg.emoji {
-			if c.measure(out.String()+seg.text+"…", sizePx) > maxW {
+			advance := c.measureWidth(seg.text, sizePx)
+			if (width + advance + ellipsis).Round() > maxW {
 				truncated = true
 				break
 			}
 			out.WriteString(seg.text)
+			width += advance
 			continue
 		}
 		cut := false
 		for _, r := range seg.text {
-			if c.measure(out.String()+string(r)+"…", sizePx) > maxW {
+			advance := c.measureWidth(string(r), sizePx)
+			if (width + advance + ellipsis).Round() > maxW {
 				truncated = true
 				cut = true
 				break
 			}
 			out.WriteRune(r)
+			width += advance
 		}
 		if cut {
 			break
@@ -450,7 +460,7 @@ func layoutMessage(c *canvas, msg Message, bubbleCol color.RGBA, innerMax, maxBu
 			header.tag = c.truncateName(header.tag, min(innerMax/2, maxHeader*scale/2)-2*pillPadX*scale, tagPx)
 			tagW = c.pillWidth(header.tag, tagPx) + headerGap*scale
 		}
-		avail := maxHeader*scale - statusW - tagW
+		avail := min(innerMax, maxHeader*scale) - statusW - tagW
 		if avail < 40*scale {
 			avail = 40 * scale
 		}

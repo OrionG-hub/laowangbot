@@ -106,6 +106,7 @@ func writeAtomic(path string, value any) error {
 		return err
 	}
 	name := temporary.Name()
+	defer os.Remove(name)
 	cleanup := func() { temporary.Close(); os.Remove(name) }
 	if err := temporary.Chmod(0o600); err != nil {
 		cleanup()

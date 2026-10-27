@@ -44,7 +44,7 @@ var credentialHeaders = []string{"Authorization", "Cookie", "X-Api-Key", "Api-Ke
 
 // checkRedirect 最多跟随三次重定向；带凭证时只允许留在同一个 scheme 和 host。
 func checkRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) >= 3 {
+	if len(via) > 3 {
 		return errors.New("too many redirects")
 	}
 	first := via[0]

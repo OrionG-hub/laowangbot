@@ -3,36 +3,93 @@ on:
   push:
     tags: ['v*']
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   test:
     uses: ./.github/workflows/ci.yml
+  binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64, windows/arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: release-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('go.mod', 'go.sum') }}-
+      - run: bash scripts/release-target.sh "$GITHUB_REF_NAME" '${{ matrix.target }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ strategy.job-index }}
+          path: dist/laowangbot-*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
   release:
-    needs: test
+    needs: [test, binaries]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: bash scripts/release.sh "${GITHUB_REF_NAME}"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: dist
+          merge-multiple: true
+      - run: bash scripts/build-plugins.sh "$GITHUB_REF_NAME" dist
+      - name: Verify assets and create checksums
+        shell: bash
+        run: |
+          for asset in laowangbot-linux-amd64 laowangbot-linux-arm64 laowangbot-darwin-amd64 laowangbot-darwin-arm64 laowangbot-windows-amd64.exe laowangbot-windows-arm64.exe plugins-catalog.json; do
+            test -s "dist/$asset"
+          done
+          cd dist
+          sha256sum laowangbot-* plugins-catalog.json > checksums.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          fail_on_unmatched_files: true
   docker:
-    needs: test
+    needs: [test, binaries]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: dist
+          merge-multiple: true
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
+          context: .
+          file: Dockerfile.release
           platforms: linux/amd64,linux/arm64
-          build-args: VERSION=${{ github.ref_name }}
+          cache-from: type=gha,scope=release-runtime
+          cache-to: type=gha,mode=max,scope=release-runtime
           push: false
           outputs: type=oci,dest=/tmp/laowangbot-image.tar
       - uses: actions/upload-artifact@v4
         with:
           name: docker-multiarch
           path: /tmp/laowangbot-image.tar
+          compression-level: 0
+          retention-days: 7

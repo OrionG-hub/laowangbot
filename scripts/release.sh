@@ -12,10 +12,7 @@ rm -rf "$out"
 mkdir -p "$out"
 
 for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
-  os=${target%/*}
-  arch=${target#*/}
-  suffix=""; [[ "$os" != windows ]] || suffix=.exe
-  GOOS=$os GOARCH=$arch LAOWANGBOT_VERSION=$version bash "$root/scripts/build.sh" "$out/laowangbot-$os-$arch$suffix"
+  bash "$root/scripts/release-target.sh" "$version" "$target" "$out"
 done
 
 bash "$root/scripts/build-plugins.sh" "$version" "$out"

@@ -8,6 +8,7 @@ package sticker
 
 import (
 	"context"
+	"errors"
 	"math/rand/v2"
 	"strconv"
 	"strings"
@@ -34,8 +35,9 @@ var fallbackEmojis = []string{"😀", "😁", "😂", "🤣", "😊", "😇", "�
 // autoPacks 是自动命名时最多试到第几个包。
 const autoPacks = 50
 
-// kind 是贴纸的格式，自动命名的包按格式分开，和 MiBox 的命名一致，
-// 用 MiBox 存过贴纸的人会接着往原来的包里存。
+var errNotOwner = kit.Fail("目标贴纸包不是你创建的")
+
+// kind 识别源贴纸格式；目标收藏包统一存放全部格式。
 type kind struct{ suffix, label string }
 
 var (
@@ -47,13 +49,14 @@ var (
 // found 是被回复的那张贴纸。
 type found struct {
 	document *tg.InputDocument
+	source   tg.InputStickerSetClass
 	emoji    string
 	kind     kind
 }
 
 // validShortName 按贴纸包短名的规则检查：字母开头，只有字母、数字和下划线。
 func validShortName(name string) bool {
-	if name == "" || len(name) > 64 {
+	if name == "" || len(name) > 64 || strings.Contains(name, "__") {
 		return false
 	}
 	for index, r := range name {
@@ -92,7 +95,7 @@ func stickerOf(message *tg.Message) (*found, bool) {
 	if attribute == nil {
 		return nil, false
 	}
-	result := &found{document: document, emoji: strings.TrimSpace(attribute.Alt), kind: staticKind}
+	result := &found{document: document, source: attribute.Stickerset, emoji: strings.TrimSpace(attribute.Alt), kind: staticKind}
 	if result.emoji == "" {
 		result.emoji = fallbackEmojis[rand.IntN(len(fallbackEmojis))]
 	}
@@ -146,29 +149,74 @@ func full(err error) bool {
 	return tgerr.Is(err, "STICKERS_TOO_MUCH") || tgerr.Is(err, "STICKERPACK_STICKERS_TOO_MUCH")
 }
 
-// exists 查一个贴纸包在不在。包满没满不在这里查：上限以 Telegram 为准，
+// lookup 读取目标包的所有权。包满没满不在这里查：上限以 Telegram 为准，
 // 加贴纸时它会回满了的错误，见 full。
-func exists(ctx context.Context, api *tg.Client, name string) (bool, error) {
-	_, err := api.MessagesGetStickerSet(ctx, &tg.MessagesGetStickerSetRequest{Stickerset: &tg.InputStickerSetShortName{ShortName: name}})
+func lookup(ctx context.Context, api *tg.Client, name string) (*tg.MessagesStickerSet, error) {
+	result, err := api.MessagesGetStickerSet(ctx, &tg.MessagesGetStickerSetRequest{Stickerset: &tg.InputStickerSetShortName{ShortName: name}})
 	if err == nil {
-		return true, nil
+		set, ok := result.(*tg.MessagesStickerSet)
+		if !ok {
+			return nil, kit.Fail("未获取到贴纸包信息，请重试")
+		}
+		return set, nil
 	}
 	if tgerr.Is(err, "STICKERSET_INVALID") {
-		return false, nil
+		return nil, nil
 	}
-	return false, err
+	return nil, err
 }
 
 // add 把贴纸加进名为 name 的包，包不存在就用 title 新建。返回是否新建了。
 func add(ctx context.Context, api *tg.Client, name, title string, sticker *found) (bool, error) {
+	created, err := addOnce(ctx, api, name, title, sticker)
+	if !tgerr.Is(err, "FILE_REFERENCE_EXPIRED", "FILE_REFERENCE_INVALID", "FILE_REFERENCE_EMPTY") {
+		return created, err
+	}
+	if sticker.source == nil {
+		return created, err
+	}
+	if _, empty := sticker.source.(*tg.InputStickerSetEmpty); empty {
+		return created, err
+	}
+	result, refreshErr := api.MessagesGetStickerSet(ctx, &tg.MessagesGetStickerSetRequest{Stickerset: sticker.source})
+	if refreshErr != nil {
+		return created, refreshErr
+	}
+	if set, ok := result.(*tg.MessagesStickerSet); ok {
+		for _, entry := range set.Documents {
+			if doc, ok := entry.(*tg.Document); ok && doc.ID == sticker.document.ID {
+				sticker.document = &tg.InputDocument{ID: doc.ID, AccessHash: doc.AccessHash, FileReference: doc.FileReference}
+				return addOnce(ctx, api, name, title, sticker)
+			}
+		}
+	}
+	return created, err
+}
+
+func addOnce(ctx context.Context, api *tg.Client, name, title string, sticker *found) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	item := tg.InputStickerSetItem{Document: sticker.document, Emoji: sticker.emoji}
-	present, err := exists(ctx, api, name)
+	set, err := lookup(ctx, api, name)
 	if err != nil {
 		return false, err
 	}
-	if present {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if set != nil {
+		if !set.Set.Creator {
+			return false, errNotOwner
+		}
 		_, err := api.StickersAddStickerToSet(ctx, &tg.StickersAddStickerToSetRequest{
 			Stickerset: &tg.InputStickerSetShortName{ShortName: name}, Sticker: item})
+		if tgerr.Is(err, "STICKERSET_INVALID") {
+			// Only a confirmed ownership change permits another destination.
+			if latest, checkErr := lookup(ctx, api, name); checkErr == nil && latest != nil && !latest.Set.Creator {
+				return false, errNotOwner
+			}
+		}
 		return false, err
 	}
 	_, err = api.StickersCreateStickerSet(ctx, &tg.StickersCreateStickerSetRequest{
@@ -176,43 +224,57 @@ func add(ctx context.Context, api *tg.Client, name, title string, sticker *found
 	return true, err
 }
 
-// save 存贴纸：指定了包就存进那个包；否则按 用户名_格式_序号 依次找一个没满的包，
-// 都满了或者不存在就新建下一个。
+// save 按指定名称或 用户名_stickers_序号 寻找可写的包，满包或重名时换后缀。
 func save(ctx context.Context, client *bot.Client, target string, sticker *found) (string, bool, error) {
+	if target != "" && !validShortName(target) {
+		return "", false, kit.Fail("贴纸包名无效（字母开头，最多 64 个字母、数字或下划线，不能连续下划线）")
+	}
 	api := client.API()
 	username := ownUsername(client.Self())
-	title := "@" + username + " 的收藏（" + sticker.kind.label + "）"
-	if target != "" {
-		if username == "" {
-			title = target
-		}
-		created, err := add(ctx, api, target, title, sticker)
-		return target, created, friendly(err)
-	}
+	hasUsername := username != ""
 	if username == "" {
-		return "", false, kit.Fail("账号没有用户名，没法自动给贴纸包起名。先用 .sticker 包名 设一个默认包")
+		username = "user" + strconv.FormatInt(client.SelfID(), 10)
+	}
+	title := "@" + username + " 的收藏"
+	if target != "" && !hasUsername {
+		title = target
 	}
 	for index := 1; index <= autoPacks; index++ {
-		name := username + sticker.kind.suffix + "_" + strconv.Itoa(index)
+		if err := ctx.Err(); err != nil {
+			return "", false, err
+		}
+		name := username + "_stickers_" + strconv.Itoa(index)
+		if target != "" {
+			name = target
+			if index > 1 {
+				suffix := "_" + strconv.Itoa(index)
+				prefix := strings.TrimRight(target[:min(len(target), 64-len(suffix))], "_")
+				name = prefix + suffix
+				if strings.EqualFold(name, target) {
+					name = strings.TrimRight(prefix[:len(prefix)-1], "_") + suffix
+				}
+			}
+		}
 		created, err := add(ctx, api, name, title, sticker)
-		if full(err) {
+		if full(err) || errors.Is(err, errNotOwner) || tgerr.Is(err, "PACK_SHORT_NAME_OCCUPIED", "SHORTNAME_OCCUPY_FAILED") {
 			continue
 		}
 		return name, created, friendly(err)
 	}
-	return "", false, kit.Failf("自动命名的 %d 个贴纸包都满了，用 .sticker to 包名 存到别的包", autoPacks)
+	return "", false, kit.Failf("自动命名的 %d 个贴纸包均已满或被占用，用 .sticker to 包名 存到自己的其他包", autoPacks)
 }
 
 func help(prefix string) string {
 	p := command.Escape(prefix)
 	return "⭐ <b>收藏贴纸</b>\n\n把别人的贴纸存进你自己的贴纸包，静态、动态、视频贴纸都行。\n\n" +
 		"• 回复一个贴纸发 <code>" + p + "sticker</code> 存到默认包；没设默认包就存到自动命名的 " +
-		"<code>用户名_static_1</code> 这类包里，满了自动换下一个\n" +
+		"<code>用户名_stickers_1</code> 这类包里，静态、动态、视频统一收藏，满了自动换下一个\n" +
 		"• 回复贴纸发 <code>" + p + "sticker to 包名</code> 这一次存到指定的包\n" +
+		"• 默认包或指定包已满、被占用时，依次尝试 包名_2、包名_3，最多 50 个；过长的包名会截短保留序号，默认设置不变\n" +
 		"• <code>" + p + "sticker 包名</code> 设默认包，包不存在的话第一次存时新建\n" +
 		"• <code>" + p + "sticker cancel</code> 取消默认包\n" +
 		"• 不回复发 <code>" + p + "sticker</code> 看当前设置\n\n" +
-		"包名只能用字母、数字和下划线，字母开头。贴纸没带 emoji 时随机配一个。"
+		"包名最多 64 个字符，字母开头，仅字母、数字和下划线，不能连续下划线。没有用户名时用 user账号ID 自动命名。贴纸没带 emoji 时随机配一个。"
 }
 
 func packLink(name string) string {
@@ -292,9 +354,9 @@ func configure(ctx context.Context, inv *command.Invocation, saved *store.Store[
 		case current.DefaultPack != "":
 			text += "默认贴纸包：" + packLink(current.DefaultPack)
 		case username != "":
-			text += "没设默认包，会存进 " + command.Code(username+"_static_1") + " 这类自动命名的包"
+			text += "没设默认包，会存进 " + command.Code(username+"_stickers_1") + " 这类自动命名的包"
 		default:
-			text += "没设默认包，账号也没有用户名，收藏前要先用 " + command.Code(inv.Prefix+"sticker 包名") + " 设一个"
+			text += "没设默认包，会存进 " + command.Code("user"+strconv.FormatInt(inv.Client.SelfID(), 10)+"_stickers_1") + " 这类自动命名的包"
 		}
 		return inv.Edit(ctx, text+"\n\n回复一个贴纸发 "+command.Code(inv.Prefix+"sticker")+" 收藏。")
 	case strings.EqualFold(argument, "cancel"):
@@ -307,7 +369,7 @@ func configure(ctx context.Context, inv *command.Invocation, saved *store.Store[
 	case !validShortName(argument):
 		return inv.EditText(ctx, "❌ 包名只能用字母、数字和下划线，字母开头")
 	}
-	present, err := exists(ctx, inv.Client.API(), argument)
+	set, err := lookup(ctx, inv.Client.API(), argument)
 	if err != nil {
 		return inv.EditText(ctx, "❌ 查不了这个贴纸包："+command.Brief(err))
 	}
@@ -315,8 +377,11 @@ func configure(ctx context.Context, inv *command.Invocation, saved *store.Store[
 		return err
 	}
 	note := "，第一次收藏时新建"
-	if present {
-		note = "，要是这个包不是你建的，收藏时会失败"
+	if set != nil {
+		note = ""
+		if !set.Set.Creator {
+			note = "，此名称已被占用，收藏时自动寻找可用的后缀包"
+		}
 	}
 	return inv.Edit(ctx, "✅ 默认贴纸包设为 "+command.Code(argument)+note)
 }

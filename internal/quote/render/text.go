@@ -84,12 +84,16 @@ func emojiAt(entities []Entity, units []int, index int) *Entity {
 // buildCells 把一段文字 + 实体排成 cell 序列。sizePx 是字号（输出像素），
 // emojiSize 是行内表情的边长，linkTint 是链接类实体的颜色。
 func (c *canvas) buildCells(text string, entities []Entity, sizePx float64, emojiSize int, linkTint, baseTint color.RGBA) []cell {
-	text = strings.ReplaceAll(text, "\r", "")
 	runes := []rune(text)
 	units := utf16Units(text)
 	cells := make([]cell, 0, len(runes))
 	index := 0
 	for index < len(runes) {
+		// Keep the original UTF-16 positions even when a CR is not drawn.
+		if runes[index] == '\r' {
+			index++
+			continue
+		}
 		// 自定义表情实体整段换成一张图：只跳过同一个实体覆盖的 rune，
 		// 相邻的不同表情互不干扰。
 		if e := emojiAt(entities, units, index); e != nil {
@@ -273,7 +277,7 @@ func (c *canvas) truncateLines(lines []line, maxLines, maxWidth int, sizePx floa
 		last.width -= last.cells[len(last.cells)-1].width
 		last.cells = last.cells[:len(last.cells)-1]
 	}
-	last.cells = append(last.cells, cell{kind: cellRune, r: '…', width: ellipsis})
+	last.cells = append(last.cells, cell{kind: cellRune, r: '…', width: ellipsis, tint: textTint})
 	last.width += ellipsis
 	return lines
 }

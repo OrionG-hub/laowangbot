@@ -41,3 +41,12 @@ bash scripts/build.sh
 `bash scripts/release.sh vX.Y.Z` 生成六个平台/架构构件和校验清单；Go 交叉编译不能证明目标平台运行正确。真实 Linux systemd、Windows 计划任务、Docker 及 Telegram 登录验收仍需相应环境。`--verify` 使用真实账号与外部服务，先停用同会话的其他实例。
 
 不承诺固定 RSS 或性能倍数；应分别测量核心、常驻插件及临时媒体进程。当前多语言范围是 README，内建命令大部分提示仍为中文。
+
+
+## 1.0.0 发布流水线
+
+标签通过 Release 工作流运行检查，六平台官方二进制并行交叉编译，并在测试与原生平台检查全部通过后汇总上传。每个平台保留独立 Go 构建缓存，归档附件关闭重复压缩；CI 合并 race、integration 和覆盖率运行，普通 CI 仅响应分支与 PR，不再额外响应标签。
+
+`Dockerfile.release` 专用于正式发布：通过专用 dockerignore 只接收官方 Linux 二进制，避免再次编译 Go；运行层通过 BuildKit 缓存。普通 `Dockerfile` 仍支持从源码构建及 TGS 可选依赖。两种镜像入口和状态目录一致。
+
+`bash scripts/release.sh v1.0.0` 保留本地完整六平台串行发布流程；`bash scripts/release-target.sh v1.0.0 linux/amd64 [输出目录]` 只构建一个目标，不删除其他目标产物。实际发布耗时受缓存、runner 排队、依赖下载与 Docker 镜像下载影响，不能保证固定时长。

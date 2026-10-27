@@ -166,7 +166,11 @@ func (c *PeerCache) rememberUser(user *tg.User) {
 	if photo, ok := user.GetPhoto(); ok {
 		if value, ok := photo.(*tg.UserProfilePhoto); ok {
 			info.PhotoID, info.PhotoDC = value.PhotoID, value.DCID
+		} else if !user.Min {
+			info.PhotoID, info.PhotoDC = 0, 0
 		}
+	} else if !user.Min {
+		info.PhotoID, info.PhotoDC = 0, 0
 	}
 	if status, ok := user.GetEmojiStatus(); ok {
 		info.EmojiStatus = ""
@@ -198,6 +202,8 @@ func (c *PeerCache) rememberChannel(channel *tg.Channel) {
 	info.Title, info.Username = channel.Title, channel.Username
 	if photo, ok := channel.GetPhoto().(*tg.ChatPhoto); ok {
 		info.PhotoID, info.PhotoDC = photo.PhotoID, photo.DCID
+	} else if !channel.Min {
+		info.PhotoID, info.PhotoDC = 0, 0
 	}
 	info.Broadcast, info.Megagroup, info.Noforwards = channel.Broadcast, channel.Megagroup, channel.Noforwards
 	info.Monoforum = channel.Monoforum
@@ -220,6 +226,8 @@ func (c *PeerCache) rememberChat(chat *tg.Chat) {
 	info.Title, info.Noforwards, info.Creator, info.Left, info.AdminRights = chat.Title, chat.Noforwards, chat.Creator, chat.Left, chat.AdminRights
 	if photo, ok := chat.GetPhoto().(*tg.ChatPhoto); ok {
 		info.PhotoID, info.PhotoDC = photo.PhotoID, photo.DCID
+	} else {
+		info.PhotoID, info.PhotoDC = 0, 0
 	}
 }
 
@@ -293,10 +301,12 @@ func (c *PeerCache) InputPeer(peer tg.PeerClass) (tg.InputPeerClass, bool) {
 			return &tg.InputPeerSelf{}, true
 		}
 		info, known := c.users[value.UserID]
-		c.mu.RUnlock()
 		if known && info.HasHash {
-			return &tg.InputPeerUser{UserID: value.UserID, AccessHash: info.Hash}, true
+			peer := &tg.InputPeerUser{UserID: value.UserID, AccessHash: info.Hash}
+			c.mu.RUnlock()
+			return peer, true
 		}
+		c.mu.RUnlock()
 		if hash, ok := lookupHash(durable, selfID, value.UserID, false); ok {
 			return &tg.InputPeerUser{UserID: value.UserID, AccessHash: hash}, true
 		}
@@ -306,10 +316,12 @@ func (c *PeerCache) InputPeer(peer tg.PeerClass) (tg.InputPeerClass, bool) {
 		return &tg.InputPeerChat{ChatID: value.ChatID}, true
 	case *tg.PeerChannel:
 		info, known := c.channels[value.ChannelID]
-		c.mu.RUnlock()
 		if known && info.HasHash {
-			return &tg.InputPeerChannel{ChannelID: value.ChannelID, AccessHash: info.Hash}, true
+			peer := &tg.InputPeerChannel{ChannelID: value.ChannelID, AccessHash: info.Hash}
+			c.mu.RUnlock()
+			return peer, true
 		}
+		c.mu.RUnlock()
 		if hash, ok := lookupHash(durable, selfID, value.ChannelID, true); ok {
 			return &tg.InputPeerChannel{ChannelID: value.ChannelID, AccessHash: hash}, true
 		}

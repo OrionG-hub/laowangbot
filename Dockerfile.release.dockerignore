@@ -1,0 +1,7 @@
+# Only the two verified Linux release binaries are needed as Docker context.
+**
+!dist/
+!dist/laowangbot-linux-amd64
+!dist/laowangbot-linux-arm64
+!Dockerfile.release
+!Dockerfile.release.dockerignore
