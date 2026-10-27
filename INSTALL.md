@@ -152,6 +152,12 @@ docker run -d --name laowangbot --restart unless-stopped   -v laowangbot-data:/d
 
 Linux 可以按已有校验值下载 Ookla CLI；macOS/Windows 请先手动安装对应平台的 `speedtest` 并加入 PATH。部分系统资源指标仍只在 Linux 可用，其他系统显示未知或零值。
 
+## yvlu 本地渲染
+
+文字语录优先使用内嵌字体的 Go 本地渲染器，无需 Node.js。静态贴纸转 WebP 需要 ffmpeg（Linux：`sudo apt-get install -y ffmpeg`；macOS：`brew install ffmpeg`）；图片与故事卡直接生成 PNG。Unicode 表情图片按需从 Twemoji CDN 获取。
+
+含媒体、剧透/引用格式、无法解码的自定义表情或本地转换失败时回退远端服务；此时标签仍可能不显示。TGS/视频表情状态优先使用静态缩略图，本地不输出动态状态。
+
 ## yvlu 动态贴纸
 
 WebM 视频贴纸可直接嵌入语录，无需转码。TGS 动画需要 **ffmpeg、Python 3、rlottie-python 和 Pillow**，仅处理 TGS 时按需启动，不增加常驻 Node.js 运行时。

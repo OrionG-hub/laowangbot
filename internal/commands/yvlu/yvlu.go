@@ -29,9 +29,9 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
-// 语录图片本身由远程服务渲染：本命令只负责收集谁说了什么、用的哪个头像、
-// 带什么格式，以 JSON 提交过去，再把返回的图片原样发回。文字排版、字体栈、
-// emoji 渲染都不在本进程里做。
+// 语录图片优先由本地渲染器画（internal/quote/render）：远程服务会丢弃
+// senderTag，群成员标签和管理员头衔在它那儿永远画不出来；本地渲染失败
+// （含媒体的消息、贴纸转码失败等）时回退远程服务，保留现有行为作兜底。
 const quoteEndpoint = "https://quote-api-enhanced.zhetengsha.eu.org/generate.webp"
 
 // quoteUserAgent 不是摆设：该服务前面有一层过滤，凡是它不认识的请求，
@@ -312,8 +312,11 @@ type quoteMessage struct {
 	Document      *quoteDoc     `json:"document,omitempty"`
 	Forward       *quoteFwd     `json:"forward,omitempty"`
 	// SenderTag 是作者在本群的管理员头衔，没有就留空。
-	SenderTag string      `json:"senderTag,omitempty"`
-	Audio     *quoteAudio `json:"audio,omitempty"`
+	SenderTag string `json:"senderTag,omitempty"`
+	// SenderTagRole 是头衔的身份：creator（群主）、admin（管理员）、
+	// member（普通成员）；本地渲染按身份给标签 pill 着色。
+	SenderTagRole string      `json:"senderTagRole,omitempty"`
+	Audio         *quoteAudio `json:"audio,omitempty"`
 }
 
 type quoteAudio struct {
@@ -443,7 +446,7 @@ func (s *yvluService) handle(ctx context.Context, inv *command.Invocation) error
 		return err
 	}
 	built := time.Now()
-	picture, extension, err := s.render(ctx, payload)
+	picture, extension, err := s.render(ctx, inv, payload)
 	if err != nil {
 		return err
 	}
@@ -646,8 +649,24 @@ func (s *yvluService) saveSticker(ctx context.Context, inv *command.Invocation) 
 	return inv.Edit(ctx, kit.Feedback("success", title, "贴纸包：t.me/addstickers/"+config.StickerSet))
 }
 
-// render 提交 payload，返回图片及其扩展名。
-func (s *yvluService) render(ctx context.Context, payload *quotePayload) ([]byte, string, error) {
+// render 优先本地渲染（internal/quote/render），本地失败时回退远程服务，
+// 保留现有行为作兜底：含媒体的消息、贴纸转码失败等都走这条路。
+func (s *yvluService) render(ctx context.Context, inv *command.Invocation, payload *quotePayload) ([]byte, string, error) {
+	if data, ext, err := s.renderLocal(ctx, inv, payload); err == nil {
+		return data, ext, nil
+	} else {
+		if ctx.Err() != nil {
+			return nil, "", ctx.Err()
+		}
+		if inv != nil && inv.Log != nil {
+			inv.Log.Info("yvlu.local_render_fallback", "error", err.Error())
+		}
+	}
+	return s.renderRemote(ctx, payload)
+}
+
+// renderRemote 提交 payload 给远程服务，返回图片及其扩展名。
+func (s *yvluService) renderRemote(ctx context.Context, payload *quotePayload) ([]byte, string, error) {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return nil, "", err
@@ -748,8 +767,9 @@ func (s *yvluService) build(ctx context.Context, inv *command.Invocation, reply 
 				item.Forward = label
 			}
 		}
-		if tag := s.senderTag(ctx, inv, message, author.ID); tag != "" {
+		if tag, role := s.senderTag(ctx, inv, message, author.ID); tag != "" {
 			item.SenderTag = tag
+			item.SenderTagRole = role
 		}
 		if item.Entities == nil {
 			item.Entities = []quoteEntity{}
@@ -1334,78 +1354,77 @@ func forwardLabel(inv *command.Invocation, message *bot.Message) *quoteFwd {
 	return &quoteFwd{Label: label}
 }
 
-func participantTag(participant any) string {
+// participantTag 返回 participant 的标签与身份：creator（群主）、admin
+// （管理员）、member（普通成员）。无自定义头衔时群主默认“所有者”
+// （客户端的默认显示）、管理员默认“管理员”。
+func participantTag(participant any) (string, string) {
 	switch value := participant.(type) {
 	case *tg.ChatParticipant:
-		return strings.TrimSpace(value.Rank)
+		return strings.TrimSpace(value.Rank), "member"
 	case *tg.ChatParticipantAdmin:
 		if tag := strings.TrimSpace(value.Rank); tag != "" {
-			return tag
+			return tag, "admin"
 		}
-		return "管理员"
+		return "管理员", "admin"
 	case *tg.ChatParticipantCreator:
 		if tag := strings.TrimSpace(value.Rank); tag != "" {
-			return tag
+			return tag, "creator"
 		}
-		return "群主"
+		return "所有者", "creator"
 	case *tg.ChannelParticipant:
-		return strings.TrimSpace(value.Rank)
+		// 普通成员的自定义标签（2026 年 3 月 Telegram 更新后所有成员都可有标签）。
+		return strings.TrimSpace(value.Rank), "member"
 	case *tg.ChannelParticipantSelf:
-		return strings.TrimSpace(value.Rank)
+		return strings.TrimSpace(value.Rank), "member"
 	case *tg.ChannelParticipantAdmin:
 		if tag := strings.TrimSpace(value.Rank); tag != "" {
-			return tag
+			return tag, "admin"
 		}
-		return "管理员"
+		return "管理员", "admin"
 	case *tg.ChannelParticipantCreator:
 		if tag := strings.TrimSpace(value.Rank); tag != "" {
-			return tag
+			return tag, "creator"
 		}
-		return "群主"
+		return "所有者", "creator"
 	}
-	return ""
+	return "", ""
 }
 
-// senderTag 读取作者在本群的管理员头衔或成员标签。
-func (s *yvluService) senderTag(ctx context.Context, inv *command.Invocation, message *bot.Message, authorID int64) string {
+// senderTag 返回作者在本群的标签与身份：creator（群主）、admin（管理员）、
+// member（普通成员）。身份决定本地渲染时标签文字的颜色（群主紫、管理员绿）。
+// 覆盖普通群、超级群与频道：普通群从完整群信息里找成员，超级群与频道查
+// participant。
+func (s *yvluService) senderTag(ctx context.Context, inv *command.Invocation, message *bot.Message, authorID int64) (string, string) {
 	ctx, cancel := context.WithTimeout(ctx, tagBudget)
 	defer cancel()
-	chat, err := inv.Client.InputPeer(message.Peer)
-	if err != nil {
-		return ""
-	}
-	if group, ok := chat.(*tg.InputPeerChat); ok {
-		full, err := inv.Client.API().MessagesGetFullChat(ctx, group.ChatID)
-		if err != nil {
-			return ""
-		}
-		info, ok := full.FullChat.(*tg.ChatFull)
-		if !ok {
-			return ""
-		}
-		members, ok := info.Participants.(*tg.ChatParticipants)
-		if !ok {
-			return ""
-		}
-		for _, member := range members.Participants {
-			if member.GetUserID() == authorID {
-				return participantTag(member)
+	if chat, err := inv.Client.InputPeer(message.Peer); err == nil {
+		if group, ok := chat.(*tg.InputPeerChat); ok {
+			if full, err := inv.Client.API().MessagesGetFullChat(ctx, group.ChatID); err == nil {
+				if info, ok := full.FullChat.(*tg.ChatFull); ok {
+					if members, ok := info.Participants.(*tg.ChatParticipants); ok {
+						for _, member := range members.Participants {
+							if member.GetUserID() == authorID {
+								return participantTag(member)
+							}
+						}
+					}
+				}
+			}
+		} else if channel, ok := bot.InputChannel(chat); ok {
+			if participant, ok := inv.Client.Peers().InputPeer(&tg.PeerUser{UserID: authorID}); ok {
+				if result, err := inv.Client.API().ChannelsGetParticipant(ctx, &tg.ChannelsGetParticipantRequest{Channel: channel, Participant: participant}); err == nil {
+					inv.Client.Peers().RememberUsers(result.Users)
+					return participantTag(result.Participant)
+				}
 			}
 		}
-		return ""
 	}
-	channel, ok := bot.InputChannel(chat)
-	if !ok {
-		return ""
+	// 查不到 participant 时退回消息自带的 from_rank：超级群消息本身就带
+	// from_rank，普通成员的自定义标签也在里面；此时身份未知，按普通成员着色。
+	if sender, ok := message.Sender.(*tg.PeerUser); ok && sender.UserID == authorID && message.Raw != nil {
+		if rank, ok := message.Raw.GetFromRank(); ok && strings.TrimSpace(rank) != "" {
+			return strings.TrimSpace(rank), "member"
+		}
 	}
-	participant, ok := inv.Client.Peers().InputPeer(&tg.PeerUser{UserID: authorID})
-	if !ok {
-		return ""
-	}
-	result, err := inv.Client.API().ChannelsGetParticipant(ctx, &tg.ChannelsGetParticipantRequest{Channel: channel, Participant: participant})
-	if err != nil {
-		return ""
-	}
-	inv.Client.Peers().RememberUsers(result.Users)
-	return participantTag(result.Participant)
+	return "", ""
 }
