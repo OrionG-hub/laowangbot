@@ -1,4 +1,4 @@
-// Package dme restores media-only anti-recall deletion of one's own messages.
+// Package dme deletes own messages, scrubbing eligible media before deletion.
 package dme
 
 import (
@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,11 +46,12 @@ func (c *dmeConfig) normalize() {
 }
 func dmeHelp(prefix string) string {
 	p := command.Escape(prefix)
-	return "🗑️ <b>智能防撤回删除</b>\n默认先替换成占位图，再双向删除；纯文本同样替换。\n\n<code>" + p + "dme 数量</code> 当前聊天最近 N 条自己的消息\n<code>" + p + "dme 999999</code> 当前聊天全部可找到的自己的消息\n回复 + <code>" + p + "dme</code> 自己的单条消息或整组图\n回复 + <code>" + p + "dme -r</code> 从回复位置到命令之前，仅自己的消息\n<code>" + p + "dme -a 数量</code> 或 <code>" + p + "dme --all 数量</code> 显式全局最新 N 条，含归档（普通及归档各最多 500 会话，每会话 80 条）\n仅处理命令开始前的消息。转发、贴纸、网页预览及超过 48 小时的消息不替换；替换失败仍尝试删除，并报告失败。"
+	return "🗑️ <b>智能防撤回删除</b>\n批量删除：纯文本直接双向删除，媒体先替换成占位图再删除。回复删除：单条或整组均保留替换流程。\n\n<code>" + p + "dme 数量</code> 当前聊天最近 N 条自己的消息\n<code>" + p + "dme 999999</code> 当前聊天全部可找到的自己的消息\n回复 + <code>" + p + "dme</code> 自己的单条消息或整组图\n回复 + <code>" + p + "dme -r</code> 从回复位置到命令之前，仅自己的消息\n<code>" + p + "dme -a 数量</code> 或 <code>" + p + "dme --all 数量</code> 显式全局最新 N 条，含归档（普通及归档各最多 500 会话，每会话 80 条）\n<code>" + p + "dme -k 关键词</code> 当前聊天全部匹配的自己的消息\n<code>" + p + "dme -a -k 关键词</code> 全部对话（含归档）匹配的自己的消息\n关键词按连续文字包含匹配，不区分大小写；-k 后整段为关键词，-a 须放在 -k 前。不与数量、回复或 -r 混用；不扩展删除相册里未匹配的消息。为保证包含匹配完整，会分页扫描自己的历史消息。\n仅处理命令开始前的消息。转发、贴纸、网页预览及超过 48 小时的消息不替换；替换失败仍尝试删除，并报告失败。"
 }
 
 type options struct {
 	count                     int
+	keyword                   string
 	global, span, reply, help bool
 }
 
@@ -63,8 +65,15 @@ func parse(args []string, hasReply bool) (options, error) {
 		o.help = !hasReply
 		return o, nil
 	}
-	for _, arg := range args {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		switch arg {
+		case "-k", "--keyword":
+			o.keyword = strings.TrimSpace(strings.Join(args[i+1:], " "))
+			if o.keyword == "" || o.count > 0 || o.span || hasReply {
+				return o, fmt.Errorf("关键词不能为空，且不能与回复、数量或 -r 混用；-a 请放在 -k 前")
+			}
+			return o, nil
 		case "-a", "--all":
 			if o.global {
 				return o, fmt.Errorf("重复的全局参数")
@@ -104,7 +113,7 @@ func Register(a *app.App) {
 	cfgStore := kit.NewStore(a, "dme.json", dmeDefaults)
 	var mu sync.Mutex
 	active := map[string]bool{}
-	a.Registry.Register(&command.Command{Name: "dme", Description: "默认先替换媒体再删除自己的消息", Usage: "数量 | 回复 [-r] | -a 数量", Help: dmeHelp, Timeout: -1, Handle: func(ctx context.Context, inv *command.Invocation) error {
+	a.Registry.Register(&command.Command{Name: "dme", Description: "删除自己的消息，支持关键词清理及媒体替换", Usage: "数量 | 回复 [-r] | -a 数量 | [-a] -k 关键词", Help: dmeHelp, Timeout: -1, Handle: func(ctx context.Context, inv *command.Invocation) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -166,6 +175,7 @@ type dmeRun struct {
 	matched, deleted, failed, edited, failedEdits int
 	scanFailed                                    int
 	missingImage                                  bool
+	replaceText                                   bool
 }
 
 func newRun(ctx context.Context, inv *command.Invocation, cfg dmeConfig, imagePath string) (*dmeRun, error) {
@@ -305,8 +315,11 @@ func (r *dmeRun) process(peer tg.InputPeerClass, batch []*tg.Message) error {
 		if err := r.ctx.Err(); err != nil {
 			return err
 		}
-		if err := r.scrub(peer, m); err != nil {
-			return err
+		_, emptyMedia := m.Media.(*tg.MessageMediaEmpty)
+		if r.replaceText || (m.Media != nil && !emptyMedia) {
+			if err := r.scrub(peer, m); err != nil {
+				return err
+			}
 		}
 		ids = append(ids, m.ID)
 	}
@@ -331,6 +344,7 @@ func (r *dmeRun) history(peer tg.InputPeerClass, offset, limit, maxID, minID int
 	return messages, nil
 }
 func (r *dmeRun) execute(o options) error {
+	r.replaceText = o.reply && !o.span
 	var reply *tg.Message
 	if o.reply {
 		found, err := r.client.GetMessages(r.ctx, r.peer, []int{r.inv.Message.ReplyToID})
@@ -349,6 +363,12 @@ func (r *dmeRun) execute(o options) error {
 	}
 	if err := r.retry(func() error { return r.client.Delete(r.ctx, r.peer, []int{r.inv.Message.ID}) }); err != nil {
 		return err
+	}
+	if o.keyword != "" {
+		if o.global {
+			return r.keywordGlobal(o.keyword)
+		}
+		return r.keywordSearch(r.peer, r.peerID, r.inv.Message.ID, o.keyword)
 	}
 	if o.global {
 		return r.global(o.count)
