@@ -336,7 +336,7 @@
     "xm": {
       "name": "羡慕死了",
       "url": "eat/eatxm.png",
-      "me": {
+      "you": {
         "x": 131,
         "y": 22,
         "mask": "eat/maskxm.png"
