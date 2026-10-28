@@ -422,11 +422,11 @@
     },
     "fw": {
       "name": "我是废物",
-      "url": "eatfw.jpg",
+      "url": "eat/eatfw.jpg",
       "you": {
         "x": 177,
         "y": 79,
-        "mask": "maskfw.png"
+        "mask": "eat/maskfw.png"
       }
     }
   }
