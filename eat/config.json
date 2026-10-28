@@ -419,6 +419,15 @@
         "y": 50,
         "mask": "eat/maskdb.png"
       }
+    },
+    "fw": {
+      "name": "我是废物",
+      "url": "eatfw.jpg",
+      "you": {
+        "x": 177,
+        "y": 79,
+        "mask": "maskfw.png"
+      }
     }
   }
 }
