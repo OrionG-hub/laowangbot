@@ -410,6 +410,15 @@
         "y": 116,
         "mask": "eat/maskex.png"
       }
+    },
+    "db": {
+      "name": "你不准玩电报",
+      "url": "eat/eatdb.jpg",
+      "you": {
+        "x": 244,
+        "y": 50,
+        "mask": "eat/maskdb.png"
+      }
     }
   }
 }
