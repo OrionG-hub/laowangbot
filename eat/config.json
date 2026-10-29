@@ -433,8 +433,8 @@
       "name": "我是猪",
       "url": "eat/eatzhu.jpg",
       "you": {
-        "x": 130,
-        "y": 268,
+        "x": 97,
+        "y": 247,
         "mask": "eat/maskzhu.png"
       }
     }
