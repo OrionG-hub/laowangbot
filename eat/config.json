@@ -428,6 +428,15 @@
         "y": 79,
         "mask": "eat/maskfw.png"
       }
+    },
+    "zhu": {
+      "name": "我是猪",
+      "url": "eat/eatzhu.jpg",
+      "you": {
+        "x": 42,
+        "y": 117,
+        "mask": "eat/maskzhu.png"
+      }
     }
   }
 }
