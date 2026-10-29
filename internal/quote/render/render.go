@@ -561,9 +561,11 @@ func layoutMessage(c *canvas, msg Message, bubbleCol color.RGBA, innerMax, maxBu
 		blk.bubbleH += blockGap * scale * (blocks - 1)
 	}
 
-	// 头像列：显示头像时气泡右移，头像与气泡底部对齐。
+	// 头像列：气泡一律右移头像位。连续同作者消息不画头像、不写名字，
+	// 但气泡左缘仍与首条对齐（与 Telegram 分组显示一致）；头像只在
+	// showAvatar 时画，头像与气泡底部对齐。
 	blk.showAvatar = msg.ShowAvatar
-	blk.width = blk.bubbleW
+	blk.width = blk.bubbleW + (avatarD+avatarGap)*scale
 	blk.height = blk.bubbleH
 	if blk.showAvatar {
 		if msg.From.Avatar != nil {
@@ -571,7 +573,6 @@ func layoutMessage(c *canvas, msg Message, bubbleCol color.RGBA, innerMax, maxBu
 		} else {
 			blk.avatar = gradientAvatar(c, msg.From.Name, msg.From.ID, avatarD*scale)
 		}
-		blk.width += (avatarD + avatarGap) * scale
 		if blk.height < avatarD*scale {
 			blk.height = avatarD * scale
 		}
@@ -581,13 +582,10 @@ func layoutMessage(c *canvas, msg Message, bubbleCol color.RGBA, innerMax, maxBu
 
 // drawBlock 把排好的消息画到画布上：气泡、转发、名字行、回复块、正文、头像。
 func drawBlock(c *canvas, blk *block, blockX, blockY, scale int) {
-	bubbleX := blockX
-	if blk.showAvatar {
-		bubbleX += (avatarD + avatarGap) * scale
-		if blk.avatar != nil {
-			avatar := circleMask(blk.avatar, avatarD*scale)
-			drawImageAt(c.img, avatar, blockX, blockY+blk.height-avatarD*scale)
-		}
+	bubbleX := blockX + (avatarD+avatarGap)*scale
+	if blk.showAvatar && blk.avatar != nil {
+		avatar := circleMask(blk.avatar, avatarD*scale)
+		drawImageAt(c.img, avatar, blockX, blockY+blk.height-avatarD*scale)
 	}
 	bubble := blk.bubbleCol
 	fillRoundedRect(c.img, bubbleX, blockY, blk.bubbleW, blk.bubbleH, bubbleRad*scale, bubble)
