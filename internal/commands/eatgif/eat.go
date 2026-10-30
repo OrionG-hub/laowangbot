@@ -31,7 +31,7 @@ import (
 
 // eatSource 是 .eat 默认的素材目录：一份 JSON，列出每款表情的底图、遮罩和头像位置。
 // 素材路径多数相对于仓库根目录，少数是别的 GitHub 仓库的完整链接。
-const eatSource = "https://raw.githubusercontent.com/TeleBoxOrg/TeleBox-Plugins/main/eat/config.json"
+const eatSource = "https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/eat/config.json"
 
 // eatStamp 是「印章」款式：头像铺满画布，素材图旋转、半透明后盖在正中间。
 type eatStamp struct {
@@ -364,7 +364,7 @@ func (s *eatService) help(prefix string) string {
 	}
 	lines := []string{"<b>全部款式</b>（" + strconv.Itoa(len(catalog)) + " 款）", eatLegend}
 	lines = append(lines, eatCatalogLines(catalog)...)
-	return text + strings.Join(lines, "\n") + "\n\n素材来自 TeleBox 插件仓库，首次使用时下载并缓存，需要主机装有 ffmpeg。"
+	return text + strings.Join(lines, "\n") + "\n\n素材来自本仓库，首次使用时下载并缓存，需要主机装有 ffmpeg。"
 }
 
 // stickerMeta 是发一张静态贴纸需要的参数。宽高从编码好的 WebP 头部读一次就存进
