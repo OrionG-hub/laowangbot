@@ -1,0 +1,1065 @@
+{
+  "resources": {
+    "ada": {
+      "name": "给爷死",
+      "url": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/eatada.png",
+      "me": {
+        "x": 283,
+        "y": 146,
+        "mask": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/maskada.png"
+      },
+      "you": {
+        "x": 223,
+        "y": 314,
+        "mask": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/maskada.png"
+      }
+    },
+    "at": {
+      "name": "为什么艾特我",
+      "url": "eat/eatat.png",
+      "you": {
+        "x": 46,
+        "y": 15,
+        "rotate": -19,
+        "mask": "eat/maskat.png"
+      }
+    },
+    "az": {
+      "name": "按住",
+      "url": "eat/eataz.png",
+      "you": {
+        "x": -17,
+        "y": 250,
+        "rotate": -90,
+        "mask": "eat/maskaz.png"
+      }
+    },
+    "bc": {
+      "name": "鞭笞",
+      "url": "eat/eatbc.png",
+      "me": {
+        "x": 331,
+        "y": 76,
+        "mask": "eat/maskbc1.png"
+      },
+      "you": {
+        "x": 23,
+        "y": 292,
+        "mask": "eat/maskbc2.png"
+      }
+    },
+    "bp": {
+      "name": "群伸手党前来白嫖",
+      "url": "eat/eatbp.png",
+      "you": {
+        "x": 98,
+        "y": 39,
+        "mask": "eat/maskbp.png"
+      }
+    },
+    "bfq": {
+      "name": "怎么，你不服气吗",
+      "url": "eat/eatbfq.png",
+      "you": {
+        "x": 53,
+        "y": 0,
+        "mask": "eat/maskbfq.png",
+        "rotate": -15
+      }
+    },
+    "cn": {
+      "name": "呲你",
+      "url": "eat/eatcn.png",
+      "you": {
+        "x": 188,
+        "y": 58,
+        "mask": "eat/maskcn.png"
+      }
+    },
+    "css": {
+      "name": "吃手手",
+      "url": "eat/eatcss.png",
+      "you": {
+        "x": 88,
+        "y": 0,
+        "mask": "eat/maskcss.png"
+      }
+    },
+    "dd": {
+      "name": "逗逗你呀~",
+      "url": "eat/eatdd.png",
+      "you": {
+        "x": 175,
+        "y": 62,
+        "mask": "eat/maskdd.png"
+      }
+    },
+    "dl": {
+      "name": "大佬~可靠",
+      "url": "eat/eatdl.png",
+      "me": {
+        "x": 350,
+        "y": 197,
+        "mask": "eat/maskdl1.png"
+      },
+      "you": {
+        "x": 91,
+        "y": 16,
+        "mask": "eat/maskdl2.png"
+      }
+    },
+    "fk": {
+      "name": "国际友好手势",
+      "url": "eat/eatfk.png",
+      "me": {
+        "x": 184,
+        "y": 143,
+        "mask": "eat/maskfk.png"
+      }
+    },
+    "fl": {
+      "name": "翻脸",
+      "url": "eat/eatfl.png",
+      "you": {
+        "x": 7,
+        "y": 19,
+        "mask": "eat/maskfl.png",
+        "flip": true
+      }
+    },
+    "gb": {
+      "name": "gangbang",
+      "url": "eat/eatgb.png",
+      "you": {
+        "x": 675,
+        "y": 400,
+        "mask": "eat/maskgb.png"
+      }
+    },
+    "gyx": {
+      "name": "帮忙盖一下",
+      "url": "eat/eatgyx.jpg",
+      "you": {
+        "x": 86,
+        "y": 206,
+        "mask": "eat/maskgyx.png",
+        "rotate": -45
+      }
+    },
+    "hy": {
+      "name": "你很勇喔",
+      "url": "eat/eathy.png",
+      "me": {
+        "x": 430,
+        "y": -10,
+        "mask": "eat/maskhy1.png"
+      },
+      "you": {
+        "x": 770,
+        "y": 100,
+        "mask": "eat/maskhy2.png"
+      }
+    },
+    "jgw": {
+      "name": "凭什么就你们有龟壳",
+      "url": "eat/eatjgw.png",
+      "you": {
+        "x": 237,
+        "y": 69,
+        "mask": "eat/maskjgw.png"
+      }
+    },
+    "kf": {
+      "name": "狂粉",
+      "url": "eat/eatkf.png",
+      "you": {
+        "x": 115,
+        "y": 0,
+        "mask": "eat/maskkf.png"
+      }
+    },
+    "ko": {
+      "name": "升龙拳",
+      "url": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/eatko.png",
+      "you": {
+        "x": 170,
+        "y": 95,
+        "mask": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/maskko.png"
+      }
+    },
+    "kz": {
+      "name": "看来真得控制你了",
+      "url": "eat/eatkz.png",
+      "you": {
+        "x": 1,
+        "y": 202,
+        "mask": "eat/maskkz.png"
+      }
+    },
+    "ld": {
+      "name": "我没意见",
+      "url": "eat/eatld.png",
+      "you": {
+        "x": 157,
+        "y": 0,
+        "mask": "eat/maskld.png"
+      }
+    },
+    "mb": {
+      "name": "膜拜大佬",
+      "url": "eat/eatmb.png",
+      "you": {
+        "x": 275,
+        "y": 321,
+        "mask": "eat/maskmb.png"
+      }
+    },
+    "pd": {
+      "name": "扑倒~",
+      "url": "eat/eatpd.png",
+      "you": {
+        "x": 146,
+        "y": 146,
+        "mask": "eat/maskpd.png"
+      }
+    },
+    "pl": {
+      "name": "我他妈直接跑路",
+      "url": "eat/eatpl.png",
+      "me": {
+        "x": 163,
+        "y": 15,
+        "mask": "eat/maskpl.png"
+      }
+    },
+    "pr": {
+      "name": "prpr~",
+      "url": "eat/eatpr.png",
+      "you": {
+        "x": -15,
+        "y": 209,
+        "mask": "eat/maskpr.png"
+      }
+    },
+    "qy": {
+      "name": "揭竿而起！",
+      "url": "eat/eatqy.png",
+      "me": {
+        "x": 237,
+        "y": 63,
+        "mask": "eat/maskqy.png"
+      }
+    },
+    "ri": {
+      "name": "日一下",
+      "url": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/eatri.png",
+      "you": {
+        "x": 64,
+        "y": 87,
+        "mask": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/maskri.png"
+      }
+    },
+    "sj": {
+      "name": "我会一直视奸你",
+      "url": "eat/eatsj.png",
+      "me": {
+        "x": 118,
+        "y": 42,
+        "brightness": 0.6,
+        "mask": "eat/masksj.png"
+      }
+    },
+    "sm": {
+      "name": "sm",
+      "url": "eat/eatsm.png",
+      "me": {
+        "x": 344,
+        "y": 238,
+        "mask": "eat/masksm2.png"
+      },
+      "you": {
+        "x": 108,
+        "y": 196,
+        "mask": "eat/masksm1.png"
+      }
+    },
+    "tc": {
+      "name": "老汉推车",
+      "url": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/eattc.png",
+      "me": {
+        "x": 224,
+        "y": 173,
+        "mask": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/masktc.png"
+      },
+      "you": {
+        "x": 55,
+        "y": 286,
+        "mask": "https://github.com/FoKit/PagerMaid_Plugins/raw/modify/eat/masktc.png"
+      }
+    },
+    "tlg": {
+      "name": "偷撸狗",
+      "url": "eat/eattlg.png",
+      "you": {
+        "x": 16,
+        "y": 280,
+        "mask": "eat/masktlg.png"
+      }
+    },
+    "wg": {
+      "name": "why are you gay",
+      "url": "eat/eatwg.jpg",
+      "you": {
+        "x": 35,
+        "y": 80,
+        "mask": "eat/maskwg.png"
+      }
+    },
+    "wyy": {
+      "name": "网抑云时间",
+      "url": "eat/eatwyy.png",
+      "you": {
+        "x": 135,
+        "y": 160,
+        "mask": "eat/maskwyy.png"
+      }
+    },
+    "wyz": {
+      "name": "我有罪",
+      "url": "eat/eatwyz.png",
+      "you": {
+        "x": 153,
+        "y": 0,
+        "mask": "eat/maskwyz.png"
+      }
+    },
+    "xm": {
+      "name": "羡慕死了",
+      "url": "eat/eatxm.png",
+      "you": {
+        "x": 131,
+        "y": 22,
+        "mask": "eat/maskxm.png"
+      }
+    },
+    "xd": {
+      "name": "心动",
+      "url": "eat/eatxd.jpg",
+      "you": {
+        "x": 46,
+        "y": 68,
+        "mask": "eat/maskxd.png"
+      }
+    },
+    "xt": {
+      "name": "虾头！",
+      "url": "eat/eatxt.png",
+      "you": {
+        "x": 68,
+        "y": 202,
+        "mask": "eat/maskxt.png"
+      }
+    },
+    "xyy": {
+      "name": "性压抑了",
+      "url": "eat/eatxyy.png",
+      "you": {
+        "x": 146,
+        "y": 0,
+        "mask": "eat/maskxyy.png"
+      }
+    },
+    "yuyu": {
+      "name": "我有郁郁症",
+      "url": "eat/eatyuyu.png",
+      "you": {
+        "x": 55,
+        "y": 52,
+        "mask": "eat/maskyuyu.png"
+      }
+    },
+    "bsdw": {
+      "name": "搬史大王",
+      "url": "eat/eatbsdw.png",
+      "me": {
+        "x": 270,
+        "y": 170,
+        "mask": "eat/maskbsdw.png"
+      },
+      "you": {
+        "x": 50,
+        "y": 240,
+        "mask": "eat/maskbsdw.png"
+      }
+    },
+    "tuzai": {
+      "name": "屠宰",
+      "url": "eat/eattuzai.png",
+      "stamp": {
+        "size": 512,
+        "scale": 0.9,
+        "rotate": -12,
+        "opacity": 0.6
+      }
+    },
+    "ex": {
+      "name": "看到这个我就恶心",
+      "url": "eat/eatex.jpg",
+      "you": {
+        "x": 380,
+        "y": 116,
+        "mask": "eat/maskex.png"
+      }
+    },
+    "db": {
+      "name": "你不准玩电报",
+      "url": "eat/eatdb.jpg",
+      "you": {
+        "x": 244,
+        "y": 50,
+        "mask": "eat/maskdb.png"
+      }
+    },
+    "fw": {
+      "name": "我是废物",
+      "url": "eat/eatfw.jpg",
+      "you": {
+        "x": 177,
+        "y": 79,
+        "mask": "eat/maskfw.png"
+      }
+    },
+    "zhu": {
+      "name": "我是猪",
+      "url": "eat/eatzhu.jpg",
+      "you": {
+        "x": 97,
+        "y": 247,
+        "mask": "eat/maskzhu.png"
+      }
+    },
+    "av": {
+      "name": "女优",
+      "url": "eat/eatav.png",
+      "you": {
+        "x": 187,
+        "y": 71,
+        "mask": "eat/maskav.png"
+      }
+    },
+    "baib": {
+      "name": "拜拜大佬！～",
+      "url": "eat/eatbaib.png",
+      "you": {
+        "x": 7,
+        "y": 269,
+        "mask": "eat/maskbaib.png"
+      }
+    },
+    "bb": {
+      "name": "抱抱～",
+      "url": "eat/eatbb.png",
+      "you": {
+        "x": 106,
+        "y": 276,
+        "mask": "eat/maskbb.png"
+      }
+    },
+    "bbt": {
+      "name": "吃棒棒糖啦！～",
+      "url": "eat/eatbbt.png",
+      "you": {
+        "x": 107,
+        "y": 233,
+        "mask": "eat/maskbbt.png"
+      }
+    },
+    "bll": {
+      "name": "变萝莉",
+      "url": "eat/eatbll.png",
+      "you": {
+        "x": 0,
+        "y": 230,
+        "mask": "eat/maskbll.png"
+      }
+    },
+    "cb": {
+      "name": "吃饱了！～",
+      "url": "eat/eatcb.png",
+      "you": {
+        "x": 282,
+        "y": 351,
+        "mask": "eat/maskcb.png"
+      }
+    },
+    "cbb": {
+      "name": "吃粑粑",
+      "url": "eat/eatcbb.png",
+      "you": {
+        "x": 77,
+        "y": 60,
+        "mask": "eat/maskcbb.png"
+      }
+    },
+    "cg": {
+      "name": "吃瓜瓜！～",
+      "url": "eat/eatcg.png",
+      "you": {
+        "x": 273,
+        "y": 280,
+        "mask": "eat/maskcg.png"
+      }
+    },
+    "chui": {
+      "name": "锤死你",
+      "url": "eat/eatchui.png",
+      "you": {
+        "x": -30,
+        "y": 158,
+        "mask": "eat/maskchui.png"
+      }
+    },
+    "cs": {
+      "name": "吃屎吧你！～",
+      "url": "eat/eatcs.png",
+      "you": {
+        "x": 42,
+        "y": 248,
+        "mask": "eat/maskcs.png"
+      }
+    },
+    "cy": {
+      "name": "大哥抽烟！～",
+      "url": "eat/eatcy.png",
+      "you": {
+        "x": 398,
+        "y": 224,
+        "mask": "eat/maskcy.png"
+      }
+    },
+    "cy2": {
+      "name": "大哥抽烟！～",
+      "url": "eat/eatcy2.png",
+      "you": {
+        "x": 5,
+        "y": 237,
+        "mask": "eat/maskcy2.png"
+      }
+    },
+    "daif": {
+      "name": "起飞！！大佬带飞！～",
+      "url": "eat/eatdaif.png",
+      "you": {
+        "x": 225,
+        "y": 32,
+        "mask": "eat/maskdaif.png"
+      }
+    },
+    "diaoy": {
+      "name": "姜太公钓鱼，愿者上钩！～",
+      "url": "eat/eatdiaoy.png",
+      "you": {
+        "x": 56,
+        "y": 397,
+        "mask": "eat/maskdiaoy.png"
+      }
+    },
+    "dl2": {
+      "name": "大佬！～",
+      "url": "eat/eatdl2.png",
+      "you": {
+        "x": 275,
+        "y": 321,
+        "mask": "eat/maskdl2p.png"
+      }
+    },
+    "dld": {
+      "name": "多啦打人",
+      "url": "eat/eatdld.png",
+      "you": {
+        "x": 39,
+        "y": 280,
+        "mask": "eat/maskdld.png"
+      }
+    },
+    "dsb": {
+      "name": "大傻逼啊～",
+      "url": "eat/eatdsb.png",
+      "you": {
+        "x": 358,
+        "y": 311,
+        "mask": "eat/maskdsb.png"
+      }
+    },
+    "dsb1": {
+      "name": "大傻逼～",
+      "url": "eat/eatdsb1.png",
+      "you": {
+        "x": 198,
+        "y": 372,
+        "mask": "eat/maskdsb1.png"
+      }
+    },
+    "ez": {
+      "name": "儿贼～",
+      "url": "eat/eatez.png",
+      "you": {
+        "x": 126,
+        "y": 303,
+        "mask": "eat/maskez.png"
+      },
+      "me": {
+        "x": 288,
+        "y": 92,
+        "mask": "eat/maskez1.png"
+      }
+    },
+    "gdx": {
+      "name": "狗东西",
+      "url": "eat/eatgdx.png",
+      "you": {
+        "x": 377,
+        "y": 241,
+        "mask": "eat/maskgdx.png"
+      }
+    },
+    "hq": {
+      "name": "真晦气！踩到屎了！～",
+      "url": "eat/eathq.png",
+      "you": {
+        "x": 95,
+        "y": 416,
+        "mask": "eat/maskhq.png"
+      }
+    },
+    "hu": {
+      "name": "虎一下",
+      "url": "eat/eathu.png",
+      "you": {
+        "x": -25,
+        "y": -40,
+        "mask": "eat/maskhu.png"
+      }
+    },
+    "huai": {
+      "name": "一肚子坏水",
+      "url": "eat/eathuai.png",
+      "you": {
+        "x": 100,
+        "y": -15,
+        "mask": "eat/maskhuai.png"
+      }
+    },
+    "jgg": {
+      "name": "举高高",
+      "url": "eat/eatjgg.png",
+      "you": {
+        "x": 286,
+        "y": 41,
+        "mask": "eat/maskjgg.png"
+      }
+    },
+    "ji": {
+      "name": "寄",
+      "url": "eat/eatji.png",
+      "you": {
+        "x": 334,
+        "y": 60,
+        "mask": "eat/maskji.png"
+      }
+    },
+    "jm": {
+      "name": "揪咪～",
+      "url": "eat/eatjm.png",
+      "you": {
+        "x": 267,
+        "y": 89,
+        "mask": "eat/maskjm.png"
+      },
+      "me": {
+        "x": 51,
+        "y": 87,
+        "mask": "eat/maskjm1.png"
+      }
+    },
+    "jtx": {
+      "name": "举个头像",
+      "url": "eat/eatjtx.png",
+      "you": {
+        "x": 92,
+        "y": 214,
+        "mask": "eat/maskjtx.png"
+      }
+    },
+    "jtx1": {
+      "name": "举个头像",
+      "url": "eat/eatjtx1.png",
+      "you": {
+        "x": 85,
+        "y": 269,
+        "mask": "eat/maskjtx1.png"
+      }
+    },
+    "jtx2": {
+      "name": "举个头像",
+      "url": "eat/eatjtx2.png",
+      "you": {
+        "x": 80,
+        "y": 70,
+        "mask": "eat/maskjtx2.png"
+      }
+    },
+    "jy": {
+      "name": "监狱圈禁～",
+      "url": "eat/eatjy.png",
+      "you": {
+        "x": 216,
+        "y": 285,
+        "mask": "eat/maskjy.png"
+      }
+    },
+    "kg": {
+      "name": "快滚～",
+      "url": "eat/eatkg.png",
+      "you": {
+        "x": 17,
+        "y": 292,
+        "mask": "eat/maskkg.png"
+      }
+    },
+    "love": {
+      "name": "爱你！～",
+      "url": "eat/eatlove.png",
+      "you": {
+        "x": 381,
+        "y": 228,
+        "mask": "eat/masklove.png"
+      }
+    },
+    "lp": {
+      "name": "老婆快来~",
+      "url": "eat/eatlp.png",
+      "you": {
+        "x": 14,
+        "y": 138,
+        "mask": "eat/masklp.png"
+      }
+    },
+    "lp1": {
+      "name": "老婆快来~",
+      "url": "eat/eatlp1.png",
+      "you": {
+        "x": 15,
+        "y": 130,
+        "mask": "eat/masklp1.png"
+      }
+    },
+    "nz": {
+      "name": "就不用脑子",
+      "url": "eat/eatnz.png",
+      "you": {
+        "x": 84,
+        "y": -5,
+        "mask": "eat/masknz.png"
+      }
+    },
+    "qm": {
+      "name": "骑马儿～",
+      "url": "eat/eatqm.png",
+      "you": {
+        "x": 382,
+        "y": 135,
+        "mask": "eat/maskqm.png"
+      }
+    },
+    "qv": {
+      "name": "去你的",
+      "url": "eat/eatqv.png",
+      "you": {
+        "x": 30,
+        "y": 180,
+        "mask": "eat/maskqv.png"
+      }
+    },
+    "qx": {
+      "name": "骑熊熊～",
+      "url": "eat/eatqx.png",
+      "you": {
+        "x": 85,
+        "y": 263,
+        "mask": "eat/maskqx.png"
+      }
+    },
+    "rbq": {
+      "name": "绒布球",
+      "url": "eat/eatrbq.png",
+      "you": {
+        "x": 180,
+        "y": 746,
+        "mask": "eat/maskrbq.png"
+      }
+    },
+    "rrbq": {
+      "name": "认做绒布球",
+      "url": "eat/eatrrbq.png",
+      "you": {
+        "x": 180,
+        "y": 746,
+        "mask": "eat/maskrrbq.png"
+      }
+    },
+    "sa": {
+      "name": "啊～",
+      "url": "eat/eatsa.png",
+      "you": {
+        "x": 239,
+        "y": 114,
+        "mask": "eat/masksa.png"
+      }
+    },
+    "sb": {
+      "name": "鲨抱送葬",
+      "url": "eat/eatsb.png",
+      "you": {
+        "x": 134,
+        "y": 210,
+        "mask": "eat/masksb.png"
+      }
+    },
+    "sese": {
+      "name": "不可以涩涩",
+      "url": "eat/eatsese.png",
+      "you": {
+        "x": 162,
+        "y": 157,
+        "mask": "eat/masksese.png"
+      }
+    },
+    "sh": {
+      "name": "鲨画",
+      "url": "eat/eatsh.png",
+      "you": {
+        "x": 83,
+        "y": 274,
+        "mask": "eat/masksh.png"
+      }
+    },
+    "shuy": {
+      "name": "想你的液！～",
+      "url": "eat/eatshuy.png",
+      "you": {
+        "x": 107,
+        "y": 21,
+        "mask": "eat/maskshuy.png"
+      }
+    },
+    "shuy2": {
+      "name": "想你的液！～",
+      "url": "eat/eatshuy2.png",
+      "you": {
+        "x": 107,
+        "y": 21,
+        "mask": "eat/maskshuy2.png"
+      }
+    },
+    "sn": {
+      "name": "等我磨好刀！你没了！",
+      "url": "eat/eatsn.png",
+      "you": {
+        "x": 37,
+        "y": 265,
+        "mask": "eat/masksn.png"
+      }
+    },
+    "sp": {
+      "name": "鲨炮",
+      "url": "eat/eatsp.png",
+      "you": {
+        "x": 32,
+        "y": 186,
+        "mask": "eat/masksp.png"
+      }
+    },
+    "ss": {
+      "name": "坑爹啊",
+      "url": "eat/eatss.png",
+      "you": {
+        "x": 62,
+        "y": 378,
+        "mask": "eat/maskss.png"
+      }
+    },
+    "ssha": {
+      "name": "鲨了你",
+      "url": "eat/eatssha.png",
+      "you": {
+        "x": 23,
+        "y": 338,
+        "mask": "eat/maskssha.png"
+      }
+    },
+    "st": {
+      "name": "踢你哦",
+      "url": "eat/eatst.png",
+      "you": {
+        "x": 59,
+        "y": 220,
+        "mask": "eat/maskst.png"
+      }
+    },
+    "stun": {
+      "name": "嗝",
+      "url": "eat/eatstun.png",
+      "you": {
+        "x": 243,
+        "y": 56,
+        "mask": "eat/maskstun.png"
+      }
+    },
+    "stun1": {
+      "name": "一口吞了你",
+      "url": "eat/eatstun1.png",
+      "you": {
+        "x": 110,
+        "y": 84,
+        "mask": "eat/maskstun1.png"
+      }
+    },
+    "sy": {
+      "name": "鲨鱼",
+      "url": "eat/eatsy.png",
+      "you": {
+        "x": 13,
+        "y": 266,
+        "mask": "eat/masksy.png"
+      }
+    },
+    "syao": {
+      "name": "咬死你",
+      "url": "eat/eatsyao.png",
+      "you": {
+        "x": 42,
+        "y": 141,
+        "mask": "eat/masksyao.png"
+      }
+    },
+    "sz": {
+      "name": "赞一下",
+      "url": "eat/eatsz.png",
+      "you": {
+        "x": 96,
+        "y": 13,
+        "mask": "eat/masksz.png"
+      }
+    },
+    "tm": {
+      "name": "舔猫",
+      "url": "eat/eattm.png",
+      "you": {
+        "x": 5,
+        "y": 205,
+        "mask": "eat/masktm.png"
+      }
+    },
+    "tm1": {
+      "name": "汤姆看书",
+      "url": "eat/eattm1.png",
+      "you": {
+        "x": -28,
+        "y": 167,
+        "mask": "eat/masktm1.png"
+      }
+    },
+    "tui": {
+      "name": "tuì～",
+      "url": "eat/eattui.png",
+      "you": {
+        "x": 5,
+        "y": 125,
+        "mask": "eat/masktui.png"
+      }
+    },
+    "tx": {
+      "name": "踢熊熊～",
+      "url": "eat/eattx.png",
+      "you": {
+        "x": 82,
+        "y": 97,
+        "mask": "eat/masktx.png"
+      }
+    },
+    "wenh": {
+      "name": "你什么意思？～",
+      "url": "eat/eatwenh.png",
+      "you": {
+        "x": 118,
+        "y": 171,
+        "mask": "eat/maskwenh.png"
+      }
+    },
+    "xchi": {
+      "name": "小熊吃饼干",
+      "url": "eat/eatxchi.png",
+      "you": {
+        "x": 164,
+        "y": 285,
+        "mask": "eat/maskxchi.png"
+      }
+    },
+    "xf": {
+      "name": "真下饭～",
+      "url": "eat/eatxf.png",
+      "you": {
+        "x": 217,
+        "y": 342,
+        "mask": "eat/maskxf.png"
+      }
+    },
+    "xhs": {
+      "name": "看的什么小黄书？～",
+      "url": "eat/eatxhs.png",
+      "you": {
+        "x": 150,
+        "y": 172,
+        "mask": "eat/maskxhs.png"
+      }
+    },
+    "xkl": {
+      "name": "小恐龙",
+      "url": "eat/eatxkl.png",
+      "you": {
+        "x": 117,
+        "y": 488,
+        "mask": "eat/maskxkl.png"
+      }
+    },
+    "zhi": {
+      "name": "指一下",
+      "url": "eat/eatzhi.png",
+      "you": {
+        "x": 0,
+        "y": 0,
+        "mask": "eat/maskzhi.png"
+      },
+      "me": {
+        "x": 0,
+        "y": 0,
+        "mask": "eat/maskzhi1.png"
+      }
+    },
+    "zou": {
+      "name": "揍你哦",
+      "url": "eat/eatzou.png",
+      "you": {
+        "x": 171,
+        "y": 328,
+        "mask": "eat/maskzou.png"
+      },
+      "me": {
+        "x": 444,
+        "y": 339,
+        "mask": "eat/maskzou1.png"
+      }
+    }
+  }
+}
