@@ -46,8 +46,8 @@ func telegraphLinkHTML(link string) string {
 }
 
 // answerPages 按 MiBox 的版式排出回答：Q: 问题、A: 回答，开启折叠时两段各自包进
-// 可展开的引用；超长时分页，续页带「续 (i/n)」标签，最后一页署上服务商标签。
-func answerPages(question, answerHTML, tag string, collapse bool) []string {
+// 可展开的引用；超长时分页，续页带「续 (i/n)」标签，最后一页署上模型名。
+func answerPages(question, answerHTML, model string, collapse bool) []string {
 	wrap := func(html string) string {
 		if collapse && strings.TrimSpace(html) != "" {
 			return "<blockquote expandable>" + html + "</blockquote>"
@@ -65,8 +65,8 @@ func answerPages(question, answerHTML, tag string, collapse bool) []string {
 			pages[index] = fmt.Sprintf("📋 <b>续 (%d/%d):</b>\n\n", index, len(pages)-1) + pages[index]
 		}
 	}
-	if tag != "" {
-		pages[len(pages)-1] += "\n<i>🍀Powered by " + command.Escape(tag) + "</i>"
+	if model != "" {
+		pages[len(pages)-1] += "\n<i>🍀Powered by " + command.Escape(model) + "</i>"
 	}
 	return pages
 }
@@ -182,7 +182,7 @@ func searchText(ctx context.Context, cfg aiConfig, text string, options chatOpti
 	}
 	payloads, err := Payloads(raw)
 	if err != nil {
-		return output, nil, sel.Tag, nil
+		return output, nil, sel.Model, nil
 	}
 	for _, payload := range payloads {
 		if request.Format == formatGemini {
@@ -239,7 +239,7 @@ func searchText(ctx context.Context, cfg aiConfig, text string, options chatOpti
 			add(ObjectOf(annotation)["url"], ObjectOf(annotation)["title"])
 		}
 	}
-	return output, sources, sel.Tag, nil
+	return output, sources, sel.Model, nil
 }
 
 func (s *Service) telegraphPost(ctx context.Context, cfg aiConfig, method string, body any) (map[string]any, error) {
