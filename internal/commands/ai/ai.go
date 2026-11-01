@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 	"github.com/OrionG-hub/laowangbot/internal/store"
@@ -573,6 +574,17 @@ func (s *Service) ask(ctx context.Context, inv *command.Invocation, search bool)
 	}
 	body := markdownToHTML(answer, cfg.Collapse) + sourcesHTML(sources)
 	formatted := "Q:\n" + command.Escape(question) + "\n\nA:\n" + body
+	// 有 Premium 时整个回答先发一条 Rich Message；超出它的上限、或者被拒收
+	//（比如 Premium 过期了）时退回下面的 HTML 分页和 Telegraph。
+	if inv.Client.CanSendRich() {
+		if blocks := answerRich(question, answer, sources, model, cfg.Collapse); bot.RichFits(blocks) {
+			err := deliverRich(ctx, inv, blocks, replyAnchor(inv.Message, reply))
+			if !bot.RichRejected(err) {
+				return err
+			}
+			inv.Log.Warn("ai.rich_rejected", "error", err.Error())
+		}
+	}
 	if cfg.Telegraph.Enabled && kit.UTF16Len(formatted) > 4050 {
 		link, err := s.publish(ctx, cfg, question, answer, sources)
 		if err != nil {

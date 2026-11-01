@@ -86,9 +86,9 @@ func Register(a *app.App) {
 		}},
 		&command.Command{Name: "h", Description: "help 的简写", Hidden: true, Handle: func(ctx context.Context, inv *command.Invocation) error {
 			if name := inv.Arg(0); name != "" {
-				return inv.EditHelp(ctx, renderCommandHelp(registry, inv.Prefix, name))
+				return editHelpRich(ctx, inv, helpRichSingle(registry, inv.Prefix, name), renderCommandHelp(registry, inv.Prefix, name))
 			}
-			return inv.EditHelp(ctx, renderHelpList(registry, inv.Prefix))
+			return editHelpRich(ctx, inv, helpRichList(registry, inv.Prefix), renderHelpList(registry, inv.Prefix))
 		}},
 	)
 }
