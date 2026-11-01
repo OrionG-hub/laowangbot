@@ -646,7 +646,7 @@ func (s *sumService) push(ctx context.Context, client *bot.Client, task sumTask)
 		return kit.Fail("无法定位推送目标：" + pushTarget(db, task))
 	}
 	for _, page := range command.HTMLPages(html, 3800) {
-		if _, err := client.SendHTML(ctx, peer, page, bot.SendOptions{LinkPreview: db.AIConfig.LinkPreview}); err != nil {
+		if err := s.sendSumPage(ctx, client, peer, page, bot.SendOptions{LinkPreview: db.AIConfig.LinkPreview}); err != nil {
 			return err
 		}
 	}
@@ -766,7 +766,7 @@ func (s *sumService) instant(ctx context.Context, inv *command.Invocation, sub s
 	}
 	pages := command.HTMLPages(html, 3800)
 	if !db.AIConfig.ReplyMode {
-		return kit.SendPages(ctx, inv, pages)
+		return s.sendSumPages(ctx, inv, pages)
 	}
 	// 回复模式：摘要作为新消息发出（回复命令所回复的那条），再删掉命令消息，
 	// 这样耗时较长的摘要不会被新消息顶到上面去。
@@ -775,7 +775,7 @@ func (s *sumService) instant(ctx context.Context, inv *command.Invocation, sub s
 		return err
 	}
 	for _, page := range pages {
-		if _, err := inv.Client.SendHTML(ctx, peer, page, bot.SendOptions{ReplyTo: inv.Message.ReplyToID, LinkPreview: db.AIConfig.LinkPreview}); err != nil {
+		if err := s.sendSumPage(ctx, inv.Client, peer, page, bot.SendOptions{ReplyTo: inv.Message.ReplyToID, LinkPreview: db.AIConfig.LinkPreview}); err != nil {
 			return err
 		}
 	}
