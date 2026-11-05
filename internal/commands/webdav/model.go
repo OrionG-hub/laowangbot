@@ -1,4 +1,4 @@
-// Package webdav archives Telegram media using bounded disk and HTTP streams.
+// Package webdav archives Telegram messages and media using bounded disk and HTTP streams.
 package webdav
 
 import (
@@ -26,6 +26,8 @@ type Config struct {
 
 // Record preserves every original uploads SQLite column, including imported IDs.
 type Record struct {
+	// Empty Kind is a media upload, including records from older versions.
+	Kind       string `json:"kind,omitempty"`
 	ID         int64  `json:"id"`
 	Date       string `json:"date"`
 	ChatID     string `json:"chat_id"`

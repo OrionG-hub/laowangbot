@@ -347,21 +347,60 @@ func (s *service) upload(ctx context.Context, r *request) error {
 	}
 	message, err := r.reply(ctx)
 	if err != nil {
-		return errors.New("无法读取回复的媒体消息")
+		return errors.New("无法读取回复的消息")
 	}
 	if message == nil || message.Raw == nil {
-		return errors.New("请回复一条图片、视频或文件消息后发送 .dav")
+		return errors.New("请回复一条文本、图片、视频、语音或文件消息后发送 .dav")
 	}
-	source, ok := bot.SourceOf(message.Raw)
-	if !ok {
-		return errors.New("请回复一条图片、视频、语音或文件消息；暂不处理纯文本和整组相册")
+	source, hasMedia := bot.SourceOf(message.Raw)
+	if !hasMedia && !textMessageSupported(message) {
+		return errors.New("请回复一条文本、图片、视频、语音或文件消息；不处理其他媒体和整组相册")
+	}
+	var results []string
+	uploaded := false
+	if hasMedia {
+		result, fresh, err := s.uploadArtifact(ctx, r, c, message, source, nil)
+		if err != nil {
+			return err
+		}
+		results = append(results, result)
+		uploaded = uploaded || fresh
+	}
+	if message.Text != "" {
+		payload, err := messageJSON(message, source)
+		if err != nil {
+			return errors.New("无法生成消息 JSON")
+		}
+		result, fresh, err := s.uploadArtifact(ctx, r, c, message, nil, payload)
+		if err != nil {
+			if hasMedia {
+				return fmt.Errorf("媒体已有成功记录，消息 JSON 归档失败：%w；回复同一消息重试 .dav 可补传 JSON", err)
+			}
+			return err
+		}
+		results = append(results, result)
+		uploaded = uploaded || fresh
+	}
+	if err := r.edit(ctx, strings.Join(results, "\n\n")); err != nil {
+		return err
+	}
+	if uploaded && r.notice != nil {
+		r.notice(ctx)
+	}
+	return nil
+}
+
+// Each artifact is committed independently so a failed caption can be retried
+// without downloading or uploading its already archived media again.
+func (s *service) uploadArtifact(ctx context.Context, r *request, c Config, message *bot.Message, source *bot.MediaSource, payload []byte) (string, bool, error) {
+	kind := ""
+	if payload != nil {
+		kind = "text"
+		source = &bot.MediaSource{FileName: fmt.Sprintf("message_%d.json", message.ID), Size: int64(len(payload))}
 	}
 	limit := int64(0)
 	if c.MaxFileMiB > 0 {
 		limit = c.MaxFileMiB << 20
-	}
-	if source.Size < 0 || (limit > 0 && source.Size > limit) {
-		return errors.New("文件超过配置上限")
 	}
 	target := fmt.Sprintf("%x", sha256.Sum256([]byte(c.URL+"\x00"+c.Username)))
 	name := r.name(message)
@@ -370,33 +409,36 @@ func (s *service) upload(ctx context.Context, r *request) error {
 	_, group := message.Peer.(*tg.PeerChat)
 	folder, db, err := s.chatFolder(ctx, &d, message.ChatID, name, target, channel || group)
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	if name == "" {
 		name = "会话"
 	}
 	for i := len(db.Uploads) - 1; i >= 0; i-- {
 		row := db.Uploads[i]
-		if row.Target == target && row.ChatID == message.ChatID && row.MessageID == message.ID {
-			return r.edit(ctx, fmt.Sprintf("ℹ️ 此消息已有上传记录 #%d（未重新上传）。\n%s", row.ID, command.Code(row.RemotePath)))
+		if row.Target == target && row.ChatID == message.ChatID && row.MessageID == message.ID && row.Kind == kind {
+			return fmt.Sprintf("ℹ️ 此消息已有上传记录 #%d（未重新上传）。\n%s", row.ID, command.Code(row.RemotePath)), false, nil
 		}
+	}
+	if source.Size < 0 || (limit > 0 && source.Size > limit) {
+		return "", false, errors.New("文件超过配置上限")
 	}
 	tempRoot := filepath.Join(s.root, "temp")
 	if err := os.MkdirAll(tempRoot, 0700); err != nil {
-		return errors.New("无法创建部署目录下的临时目录")
+		return "", false, errors.New("无法创建部署目录下的临时目录")
 	}
 	if err := s.checkSpace(tempRoot, max(source.Size, 64<<20)); err != nil {
-		return err
+		return "", false, err
 	}
 	temp, err := os.MkdirTemp(tempRoot, "webdav-")
 	if err != nil {
-		return errors.New("无法创建本地临时目录")
+		return "", false, errors.New("无法创建本地临时目录")
 	}
 	defer os.RemoveAll(temp)
 	local := filepath.Join(temp, "media")
 	file, err := os.OpenFile(local, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 	if err != nil {
-		return errors.New("无法创建临时媒体文件")
+		return "", false, errors.New("无法创建临时媒体文件")
 	}
 	defer file.Close()
 	basename := source.FileName
@@ -413,31 +455,37 @@ func (s *service) upload(ctx context.Context, r *request) error {
 		basename = fmt.Sprintf("%s_%d%s", kind, message.ID, ext)
 	}
 	basename = safeName(basename, 110)
-	if err := r.edit(ctx, "⬇️ 正在从 Telegram 下载\n"+command.Code(basename)); err != nil {
-		return err
-	}
-	if err := s.download(ctx, r, source, file, temp, limit); err != nil {
-		return err
+	if kind == "text" {
+		if _, err := file.Write(payload); err != nil {
+			return "", false, errors.New("无法写入消息 JSON 临时文件")
+		}
+	} else {
+		if err := r.edit(ctx, "⬇️ 正在从 Telegram 下载\n"+command.Code(basename)); err != nil {
+			return "", false, err
+		}
+		if err := s.download(ctx, r, source, file, temp, limit); err != nil {
+			return "", false, err
+		}
 	}
 	stat, err := file.Stat()
 	if err != nil {
-		return errors.New("无法读取下载文件大小")
+		return "", false, errors.New("无法读取下载文件大小")
 	}
 	bytes := stat.Size()
 	if bytes == 0 || (limit > 0 && bytes > limit) || (source.Size > 0 && bytes != source.Size) {
-		return errors.New("Telegram 下载文件大小校验失败")
+		return "", false, errors.New("Telegram 下载文件大小校验失败")
 	}
 	if err := s.checkSpace(temp, 0); err != nil {
-		return err
+		return "", false, err
 	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return errors.New("无法读取下载文件")
+		return "", false, errors.New("无法读取下载文件")
 	}
 	hash := sha256.New()
 	buffer := make([]byte, 64<<10)
 	for {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return "", false, ctx.Err()
 		}
 		n, e := file.Read(buffer)
 		if n > 0 {
@@ -447,25 +495,33 @@ func (s *service) upload(ctx context.Context, r *request) error {
 			break
 		}
 		if e != nil {
-			return errors.New("下载文件校验失败")
+			return "", false, errors.New("下载文件校验失败")
 		}
 	}
 	if err := file.Close(); err != nil {
-		return errors.New("关闭临时文件失败")
+		return "", false, errors.New("关闭临时文件失败")
 	}
 	date := dateKey(s.now())
 	directory := folder + "/" + strings.ReplaceAll(date, "-", "/")
 	if err := r.edit(ctx, "⬆️ 正在创建目录并上传 WebDAV…"); err != nil {
-		return err
+		return "", false, err
 	}
 	if err := d.directory(ctx, directory); err != nil {
-		return err
+		return "", false, err
 	}
 	destination, err := d.destination(ctx, directory, basename, bytes, hash.Sum(nil), target, db.Uploads)
-	if err != nil {
-		return err
+	var duplicate *duplicateFileError
+	recovered := kind == "text" && errors.As(err, &duplicate)
+	if recovered {
+		// destination has read the complete remote JSON and verified its SHA256
+		// and size. A previous MOVE may have succeeded before confirmation failed.
+		destination = duplicate.path
+	} else if err != nil {
+		return "", false, err
 	}
-	if c.UploadMode == "clouddrive" {
+	if recovered {
+		err = d.verify(ctx, destination, bytes)
+	} else if c.UploadMode == "clouddrive" {
 		err = (cloudDriveClient{&d}).upload(ctx, local, destination, bytes, hash.Sum(nil), func(done, total int64) {
 			update, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
@@ -481,12 +537,12 @@ func (s *service) upload(ctx context.Context, r *request) error {
 		err = d.upload(ctx, local, destination, bytes)
 	}
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return "", false, ctx.Err()
 	}
-	row := Record{Date: date, ChatID: message.ChatID, ChatName: name, MessageID: message.ID, Filename: basename, RemotePath: destination, Bytes: bytes, SHA256: fmt.Sprintf("%x", hash.Sum(nil)), CreatedAt: s.now().UTC().Format(time.RFC3339Nano), Target: target}
+	row := Record{Date: date, ChatID: message.ChatID, ChatName: name, MessageID: message.ID, Filename: basename, RemotePath: destination, Bytes: bytes, SHA256: fmt.Sprintf("%x", hash.Sum(nil)), CreatedAt: s.now().UTC().Format(time.RFC3339Nano), Target: target, Kind: kind}
 	if err := s.records.Update(func(db *Records) error {
 		for _, prev := range db.Uploads {
 			row.ID = max(row.ID, prev.ID)
@@ -495,19 +551,16 @@ func (s *service) upload(ctx context.Context, r *request) error {
 		db.Uploads = append(db.Uploads, row)
 		return nil
 	}); err != nil {
-		return errors.New("远端已上传并核验，但本地记录保存失败，请检查磁盘；请勿直接重复上传")
+		if kind == "text" {
+			return "", false, errors.New("消息 JSON 已上传并核验，但本地记录保存失败；请检查磁盘后重试 .dav 恢复记录")
+		}
+		return "", false, errors.New("远端已上传并核验，但本地记录保存失败，请检查磁盘；请勿直接重复上传")
 	}
 	verified := "远端文件大小"
 	if c.UploadMode == "clouddrive" {
 		verified = "远端文件大小及 SHA256"
 	}
-	if err := r.edit(ctx, fmt.Sprintf("✅ 已上传并核验%s\n记录 <code>#%d</code> · %.2f MiB\n%s", verified, row.ID, float64(bytes)/(1<<20), command.Code("/"+destination))); err != nil {
-		return err
-	}
-	if r.notice != nil {
-		r.notice(ctx)
-	}
-	return nil
+	return fmt.Sprintf("✅ 已上传并核验%s\n记录 <code>#%d</code> · %.2f MiB\n%s", verified, row.ID, float64(bytes)/(1<<20), command.Code("/"+destination)), true, nil
 }
 func (s *service) checkSpace(path string, remaining int64) error {
 	available, err := s.space(path)

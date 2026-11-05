@@ -12,6 +12,14 @@ import (
 	"strings"
 )
 
+// duplicateFileError identifies content already verified by a full remote read.
+// Text archives can recover a missing local record without uploading again.
+type duplicateFileError struct{ path string }
+
+func (e *duplicateFileError) Error() string {
+	return fmt.Sprintf("同名文件且 SHA256 相同，拒绝重复上传：%s", path.Base(e.path))
+}
+
 func numberedName(name string, number int) string {
 	if number == 0 {
 		return name
@@ -98,7 +106,7 @@ func (d *davClient) destination(ctx context.Context, directory, original string,
 			return "", err
 		}
 		if matches {
-			return "", fmt.Errorf("同名文件且 SHA256 相同，拒绝重复上传：%s", name)
+			return "", &duplicateFileError{path: directory + "/" + name}
 		}
 	}
 	for number := 0; ; number++ {
