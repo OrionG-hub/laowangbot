@@ -110,6 +110,16 @@ func hasCollection(raw []byte) bool {
 	}
 }
 func (d *davClient) directory(ctx context.Context, relative string) error {
+	// Most uploads reuse an existing day directory. Confirm the leaf with one
+	// request rather than issuing MKCOL and PROPFIND for every ancestor.
+	check, err := d.request(ctx, "PROPFIND", relative+"/", map[string]string{"Depth": "0"}, "", 0)
+	if err != nil {
+		return err
+	}
+	if check.status == 207 && hasCollection(check.body) {
+		return nil
+	}
+	// Missing or unconfirmed leaves still use the normal creation checks.
 	parts := strings.Split(relative, "/")
 	for i := 1; i <= len(parts); i++ {
 		path := strings.Join(parts[:i], "/") + "/"
@@ -195,6 +205,11 @@ func (d *davClient) contentMatches(ctx context.Context, relative string, size in
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
 		return false, fmt.Errorf("远端内容校验失败：HTTP %d；未完成文件已保留", res.StatusCode)
+	}
+	// A known different length cannot match. Do not download and hash an
+	// otherwise potentially very large response just to reach the same result.
+	if res.ContentLength >= 0 && res.ContentLength != size {
+		return false, nil
 	}
 	hash := sha256.New()
 	n, err := io.CopyBuffer(hash, io.LimitReader(res.Body, size+1), make([]byte, 64<<10))

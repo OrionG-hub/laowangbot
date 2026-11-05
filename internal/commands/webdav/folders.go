@@ -160,6 +160,20 @@ func (s *service) chatFolder(ctx context.Context, d *davClient, chatID, name, ta
 			}
 		}
 	}
+	// Reading already gives us an independent snapshot. Avoid cloning, syncing
+	// and reading the complete history again when no mapping or name changed.
+	changed := folder != desired || db.Chats[chatID] != desired
+	if !changed {
+		for _, row := range db.Uploads {
+			if row.Target == target && row.ChatID == chatID && strings.HasPrefix(row.RemotePath, desired+"/") && row.ChatName != name {
+				changed = true
+				break
+			}
+		}
+	}
+	if !changed {
+		return desired, db, nil
+	}
 	if err := s.records.Update(func(db *Records) error {
 		if db.Chats == nil {
 			db.Chats = map[string]string{}
