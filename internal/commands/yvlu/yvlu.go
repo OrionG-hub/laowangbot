@@ -358,6 +358,7 @@ type yvluService struct {
 	// 失效由键本身完成。
 	avatarMu sync.Mutex
 	rendered map[string]*quotePhot
+	emojis   emojiImageCache
 }
 
 // avatarCacheLimit 限制缓存大小。引用语录往往扎堆出现、反复进行——

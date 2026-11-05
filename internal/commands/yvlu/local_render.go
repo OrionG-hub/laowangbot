@@ -52,7 +52,11 @@ func (s *yvluService) renderLocal(ctx context.Context, inv *command.Invocation, 
 	for _, item := range payload.Messages {
 		messages = append(messages, toRenderMessage(item, images))
 	}
-	png, err := render.Render(messages, render.Options{Format: payload.Type, BubbleColor: payload.BackgroundColor, NameEmojis: s.nameEmojiImages(ctx, messages)})
+	nameEmojis := s.nameEmojiImages(ctx, messages)
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
+	png, err := render.Render(messages, render.Options{Format: payload.Type, BubbleColor: payload.BackgroundColor, NameEmojis: nameEmojis})
 	if err != nil {
 		return nil, "", err
 	}
@@ -78,12 +82,14 @@ func (s *yvluService) renderLocal(ctx context.Context, inv *command.Invocation, 
 var twemojiCache sync.Map // segment string -> image.Image
 
 func (s *yvluService) nameEmojiImages(ctx context.Context, messages []render.Message) map[string]image.Image {
-	out := map[string]image.Image{}
+	seen := map[string]bool{}
+	var segments []string
 	collect := func(text string) {
 		for _, seg := range render.EmojiSegments(text) {
-			if _, ok := out[seg]; ok {
+			if seen[seg] {
 				continue
 			}
+			seen[seg] = true
 			// 苹果 logo 由渲染器内嵌 mask 画，不走 Twemoji（图库没有它）。
 			if seg == render.AppleLogo {
 				continue
@@ -91,9 +97,7 @@ func (s *yvluService) nameEmojiImages(ctx context.Context, messages []render.Mes
 			if !emojiNeedsImage(seg) {
 				continue
 			}
-			if img := s.twemojiImage(ctx, seg); img != nil {
-				out[seg] = img
-			}
+			segments = append(segments, seg)
 		}
 	}
 	for _, msg := range messages {
@@ -106,7 +110,7 @@ func (s *yvluService) nameEmojiImages(ctx context.Context, messages []render.Mes
 			collect(msg.Reply.Text)
 		}
 	}
-	return out
+	return parallelImages(ctx, segments, s.twemojiImage)
 }
 
 // emojiNeedsImage 报告某 emoji 段是否需要配图：段里任一字在内嵌字体中
@@ -216,8 +220,11 @@ func decodeDataURL(url string) image.Image {
 
 // customEmojiImages 一次取回 payload 里全部自定义表情文档并解成图：
 // 表情状态与行内表情的 document ID 先去重，一次 RPC 全取回来，
-// 再逐个下载。下载失败、解码失败的 ID 不进 map，渲染时退回原字符。
+// 缓存命中的文档直接复用，其余最多四路下载。缺图时由调用方退回远程渲染。
 func (s *yvluService) customEmojiImages(ctx context.Context, inv *command.Invocation, payload *quotePayload) (map[string]image.Image, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	seen := map[string]bool{}
 	var ids []int64
 	collect := func(docID string) {
@@ -245,21 +252,47 @@ func (s *yvluService) customEmojiImages(ctx context.Context, inv *command.Invoca
 		}
 	}
 	images := map[string]image.Image{}
-	if len(ids) == 0 {
+	var missing []int64
+	for _, id := range ids {
+		if img := s.emojis.get(id); img != nil {
+			images[strconv.FormatInt(id, 10)] = img
+		} else {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
 		return images, nil
 	}
-	docs, err := inv.Client.API().MessagesGetCustomEmojiDocuments(ctx, ids)
+	docs, err := inv.Client.API().MessagesGetCustomEmojiDocuments(ctx, missing)
 	if err != nil {
 		return nil, err
 	}
+	documents := make(map[string]*tg.Document)
+	var keys []string
 	for _, entry := range docs {
 		doc, ok := entry.(*tg.Document)
 		if !ok {
 			continue
 		}
-		if img := s.customEmojiDocumentImage(ctx, inv, doc); img != nil {
-			images[strconv.FormatInt(doc.ID, 10)] = img
+		key := strconv.FormatInt(doc.ID, 10)
+		if !seen[key] || documents[key] != nil {
+			continue
 		}
+		documents[key] = doc
+		keys = append(keys, key)
+	}
+	loaded := parallelImages(ctx, keys, func(ctx context.Context, key string) image.Image {
+		img, cacheable := s.customEmojiDocumentImage(ctx, inv, documents[key])
+		if cacheable {
+			s.emojis.put(documents[key].ID, img)
+		}
+		return img
+	})
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	for key, img := range loaded {
+		images[key] = img
 	}
 	if len(images) < len(ids) {
 		return nil, errLocalUnsupported
@@ -270,20 +303,23 @@ func (s *yvluService) customEmojiImages(ctx context.Context, inv *command.Invoca
 // customEmojiDocumentImage 把一个自定义表情文档解成静态图：
 // 光栅格式（WebP/PNG/JPEG）直接下载解码；TGS 动画 v1 不渲染，
 // 但文档自带的静态缩略图能用就用缩略图，实在没有才跳过。
-func (s *yvluService) customEmojiDocumentImage(ctx context.Context, inv *command.Invocation, doc *tg.Document) image.Image {
+func (s *yvluService) customEmojiDocumentImage(ctx context.Context, inv *command.Invocation, doc *tg.Document) (image.Image, bool) {
 	mime := strings.ToLower(strings.TrimSpace(doc.MimeType))
-	if mime == "image/webp" || mime == "image/png" || mime == "image/jpeg" {
+	raster := mime == "image/webp" || mime == "image/png" || mime == "image/jpeg"
+	if raster {
 		if img := s.downloadDocumentImage(ctx, inv, doc, ""); img != nil {
-			return img
+			return img, true
 		}
 	}
 	// TGS 或光栅下载失败时退回缩略图（与 ai/images.go 的 documentThumb 同一路）。
 	if data := s.documentThumb(ctx, inv, doc); len(data) > 0 {
 		if img, err := imaging.Decode(data); err == nil {
-			return img
+			// A temporary failure must not permanently replace a raster original
+			// with its thumbnail. Animated documents intentionally use thumbnails.
+			return img, !raster
 		}
 	}
-	return nil
+	return nil, false
 }
 
 // downloadDocumentImage 下载整个文档并解码；thumbSize 为空表示原图。

@@ -19,7 +19,7 @@ WebDAV 随官方程序内置，更新后直接使用 `.dav`，无需 TPM 安装�
 
 回复纯文本消息发送 `.dav`，会将正文及消息信息归档为 `message_消息ID.json`，使用相同的会话与日期目录。带文字说明的图片、视频、语音或文件消息，同时归档媒体和独立 JSON；没有文字的媒体保持只归档文件。链接预览按文本处理，联系人、投票等其他消息类型不在支持范围内。
 
-JSON 包含 `authorId`、`id`、`mediaTypes`、`peerId`、`text`、`timestamp`，有话题或回复关系时额外包含 `threadId`、`replyToId`、`replyToPeerId`。时间为原消息的 Unix 秒级时间戳；会话/发送者 ID 沿用程序标记格式（用户为正数，普通群以 `-` 开头，超级群/频道以 `-100` 开头）；没有话题时省略 `threadId`，不伪造第三方客户端的 `namespace`。纯文本的 `mediaTypes` 为 `[]`，媒体类型为 `photo`、`video`、`audio` 或 `document`。
+JSON 包含 `authorId`、`id`、`mediaTypes`、`peerId`、`text`、`timestamp`、`datetime`，有话题或回复关系时额外包含 `threadId`、`replyToId`、`replyToPeerId`。`timestamp` 是原消息的 Unix 秒级发送时间，`datetime` 是同一时刻按北京时间（UTC+8）格式化的 `YYYY-MM-DD HH:mm:ss`，不受部署机器时区影响。例如 `1793846103` 对应 `2026-11-05 10:35:03`。新字段随新生成的 JSON 写入，已有远端 JSON 不自动补写；会话/发送者 ID 沿用程序标记格式（用户为正数，普通群以 `-` 开头，超级群/频道以 `-100` 开头）；没有话题时省略 `threadId`，不伪造第三方客户端的 `namespace`。纯文本的 `mediaTypes` 为 `[]`，媒体类型为 `photo`、`video`、`audio` 或 `document`。
 
 媒体与 JSON 各有一条成功记录，可分别通过 `.dav list`、`.dav info` 查询。若媒体成功但 JSON 失败，保留媒体记录并提示错误，回复同一消息重试 `.dav` 时只补传 JSON。若 JSON 已完成远端归档但确认或本地记录保存失败，重试时会读取同名远端文件，确认大小和 SHA256 一致后恢复记录。旧版本已经归档的媒体附带文字时，也可用同一命令补存 JSON。重复归档按消息和归档类型分别跳过，不会因消息后来编辑而刷新已有 JSON。
 

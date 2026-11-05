@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/OrionG-hub/laowangbot/internal/bot"
 	"github.com/gotd/td/tg"
@@ -35,6 +36,7 @@ type archivedMessage struct {
 	Text          string   `json:"text"`
 	ThreadID      string   `json:"threadId,omitempty"`
 	Timestamp     int      `json:"timestamp"`
+	DateTime      string   `json:"datetime"`
 	ReplyToID     int      `json:"replyToId,omitempty"`
 	ReplyToPeerID string   `json:"replyToPeerId,omitempty"`
 }
@@ -54,6 +56,7 @@ func messageJSON(message *bot.Message, source *bot.MediaSource) ([]byte, error) 
 		types = append(types, kind)
 	}
 	record := archivedMessage{AuthorID: bot.PeerID(message.Sender), ID: message.ID, MediaTypes: types, PeerID: message.ChatID, Text: message.Text, Timestamp: message.Raw.Date, ReplyToID: message.ReplyToID, ReplyToPeerID: bot.PeerID(message.ReplyToPeer)}
+	record.DateTime = time.Unix(int64(message.Raw.Date), 0).In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02 15:04:05")
 	if message.TopicID > 0 {
 		record.ThreadID = strconv.Itoa(message.TopicID)
 	}
