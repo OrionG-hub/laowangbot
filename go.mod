@@ -1,6 +1,6 @@
 module github.com/OrionG-hub/laowangbot
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/gotd/log v0.1.0
