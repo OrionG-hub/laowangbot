@@ -438,7 +438,7 @@ func notFound(inv *command.Invocation, id string) error {
 func (s *service) remove(ctx context.Context, inv *command.Invocation, sub string) error {
 	id := inv.Arg(1)
 	if id == "" {
-		return kit.Fail("用法：" + inv.Prefix + "acron "+sub+" ID")
+		return kit.Fail("用法：" + inv.Prefix + "acron " + sub + " ID")
 	}
 	found := false
 	if err := s.store.Update(func(st *state) error {
@@ -460,7 +460,7 @@ func (s *service) remove(ctx context.Context, inv *command.Invocation, sub strin
 func (s *service) disable(ctx context.Context, inv *command.Invocation, sub string) error {
 	id := inv.Arg(1)
 	if id == "" {
-		return kit.Fail("用法：" + inv.Prefix + "acron "+sub+" ID")
+		return kit.Fail("用法：" + inv.Prefix + "acron " + sub + " ID")
 	}
 	found := false
 	if err := s.store.Update(func(st *state) error {
@@ -483,7 +483,7 @@ func (s *service) disable(ctx context.Context, inv *command.Invocation, sub stri
 func (s *service) enable(ctx context.Context, inv *command.Invocation, sub string) error {
 	id := inv.Arg(1)
 	if id == "" {
-		return kit.Fail("用法：" + inv.Prefix + "acron "+sub+" ID")
+		return kit.Fail("用法：" + inv.Prefix + "acron " + sub + " ID")
 	}
 	st, err := s.read()
 	if err != nil {

@@ -528,7 +528,6 @@ func recentMessages(ctx context.Context, client *bot.Client, peer tg.InputPeerCl
 	return found, nil
 }
 
-
 // warn 只在 err 不为空时记一条 warning；acron 里用来记存任务失败。
 func warn(logger *slog.Logger, event string, err error) {
 	if err != nil && logger != nil {

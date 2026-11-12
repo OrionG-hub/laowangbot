@@ -472,4 +472,3 @@ func summary(t task) string {
 	}
 	return strings.Join(items, " · ")
 }
-
