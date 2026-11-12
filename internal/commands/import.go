@@ -40,6 +40,9 @@ var miboxImports = []miboxImport{
 	{source: "assets/t/tts_data.json", target: "t.json"},
 	{source: "assets/sticker/config.json", target: "sticker.json"},
 	{source: "assets/privacy/ip.json", target: "privacy.json"},
+	{source: "assets/acron/acron_config.json", target: "acron.json"},
+	{source: "assets/aff/data.json", target: "aff.json"},
+	{source: "assets/keyword/config.json", target: "keyword.json"},
 	// save：v2 存在自己的 config.json，v1 存在 prometheus 目录下，格式都要转换。
 	{source: "assets/save/config.json", target: "save.json", convert: save.ConvertMiBox},
 	{source: "assets/prometheus/config.json", target: "save.json", convert: save.ConvertMiBox},
