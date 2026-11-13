@@ -330,7 +330,7 @@ func (s *sumService) add(ctx context.Context, inv *command.Invocation) error {
 	if err != nil {
 		return err
 	}
-	if target == "" || interval == "" || options.count < 10 || options.count > 500 {
+	if target == "" || interval == "" || options.count < 10 || options.count > sumMaxCount {
 		return kit.Fail("用法：sum add here|群组 2h 100")
 	}
 	spec, err := sumIntervalCron(interval)

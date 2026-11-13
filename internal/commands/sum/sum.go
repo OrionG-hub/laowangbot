@@ -495,9 +495,9 @@ func chatTitle(client *bot.Client, peer tg.PeerClass) (string, string) {
 	return client.Peers().Title(peer), ""
 }
 
-// readMessages 从 beforeID 之前往回读，最多 count 条有内容的消息；timeRange 大于 0 时
-// 读到那么多小时以前就停。返回按时间正序排列的消息和对话标题。
-func (s *sumService) readMessages(ctx context.Context, client *bot.Client, chatID string, beforeID, count, timeRange int) ([]sumMessage, string, error) {
+// readMessages 从 beforeID 之前往回读，最多 count 条有内容的消息；cutoff 大于 0 时
+// 读到早于该 Unix 时间戳的消息就停。返回按时间正序排列的消息和对话标题。
+func (s *sumService) readMessages(ctx context.Context, client *bot.Client, chatID string, beforeID, count, cutoff int) ([]sumMessage, string, error) {
 	input, err := client.ResolveTarget(ctx, chatID)
 	if err != nil {
 		return nil, "", kit.Fail("无法定位群组，请先在该群发过消息或用 here")
@@ -508,13 +508,9 @@ func (s *sumService) readMessages(ctx context.Context, client *bot.Client, chatI
 		title = chatID
 	}
 	linkID := bot.PeerID(peer)
-	var cutoff int
-	if timeRange > 0 {
-		cutoff = int(time.Now().Unix()) - timeRange*3600
-	}
 	var rows []sumMessage
 	offset := beforeID
-	scanned, limit := 0, min(800, count*3)
+	scanned, limit := 0, min(sumMaxScan, count*3)
 	done := false
 	for !done && len(rows) < count && scanned < limit {
 		batch := min(100, limit-scanned)
@@ -572,11 +568,19 @@ func (s *sumService) readMessages(ctx context.Context, client *bot.Client, chatI
 
 var sumThinkPattern = regexp.MustCompile(`(?is)<thinking>.*?</thinking>|<think>.*?</think>`)
 
+// sumMaxCount 是单次总结的消息数上限；sumMaxScan 是为找齐它们最多扫描的消息数
+// （含无正文被跳过的消息）。一天的消息常超过旧上限 500，故放宽到 2000。
+const (
+	sumMaxCount = 2000
+	sumMaxScan  = 3000
+)
+
 // sumJob 是一次摘要的参数。
 type sumJob struct {
 	chatID    string
 	count     int
 	timeRange int
+	since     int // 大于 0 时只总结该 Unix 时间戳之后的消息（用于“今天”）。
 	provider  string
 	prompt    string
 	spoiler   bool
@@ -592,7 +596,11 @@ func (s *sumService) summarize(ctx context.Context, client *bot.Client, job sumJ
 	if err != nil {
 		return "", err
 	}
-	rows, title, err := s.readMessages(ctx, client, job.chatID, job.beforeID, job.count, job.timeRange)
+	cutoff := job.since
+	if cutoff <= 0 && job.timeRange > 0 {
+		cutoff = int(time.Now().Unix()) - job.timeRange*3600
+	}
+	rows, title, err := s.readMessages(ctx, client, job.chatID, job.beforeID, job.count, cutoff)
 	if err != nil {
 		return "", err
 	}
@@ -664,7 +672,7 @@ func sumErrorText(err error) string {
 func sumHelp(prefix string) string {
 	p := command.Escape(prefix)
 	code := func(args string) string { return "<code>" + p + "sum" + command.Escape(args) + "</code>" }
-	return "<b>群消息总结</b>\n\n• " + code("") + " - 总结当前群最近 100 条消息\n• " + code(" 200") + " - 指定消息数量，范围 10-500\n• " + code(" 100 --provider 名称") + " - 临时选择 AI 配置（sum 的配置名或 ai 的标签）\n\n" +
+	return "<b>群消息总结</b>\n\n• " + code("") + " - 总结当前群最近 100 条消息\n• " + code(" 200") + " - 指定消息数量，范围 10-2000\n• " + code(" today") + " - 总结今天 0 点以来的消息（最多 2000 条）\n• " + code(" 100 --provider 名称") + " - 临时选择 AI 配置（sum 的配置名或 ai 的标签）\n\n" +
 		"<b>定时总结</b>\n• " + code(" add here 2h 100") + " - 定时总结当前群，推送到默认目标（默认收藏夹）\n• " + code(" add @群组 \"0 9,21 * * *\" --time 12 --provider 名称 --spoiler 备注") + "\n" +
 		"  群组可以是 here、数字 ID、@用户名、t.me 链接或邀请链接；间隔为 30m、2h、1d，或五、六字段 Cron（六字段第一位是秒）\n" +
 		"• " + code(" list") + " / " + code(" run ID") + " / " + code(" del ID") + " / " + code(" disable ID") + " / " + code(" enable ID") + "\n" +
@@ -697,7 +705,7 @@ func Register(a *app.App) {
 		<-ctx.Done()
 		service.cron.Stop()
 	})
-	a.Registry.Register(&command.Command{Name: "sum", Description: "群消息即时与定时摘要", Usage: "[数量] | add | list | run | edit | config ...", Help: sumHelp, Timeout: 10 * time.Minute,
+	a.Registry.Register(&command.Command{Name: "sum", Description: "群消息即时与定时摘要", Usage: "[数量|today] | add | list | run | edit | config ...", Help: sumHelp, Timeout: 10 * time.Minute,
 		Handle: func(ctx context.Context, inv *command.Invocation) error {
 			err := service.handle(ctx, inv)
 			if err == nil || ctx.Err() != nil {
@@ -737,14 +745,19 @@ func (s *sumService) handle(ctx context.Context, inv *command.Invocation) error 
 	return s.instant(ctx, inv, sub)
 }
 
-// instant 立即总结当前群：.sum [数量] [--provider 名称]。
+// instant 立即总结当前群：.sum [数量|today] [--provider 名称]。
 func (s *sumService) instant(ctx context.Context, inv *command.Invocation, sub string) error {
 	count := 100
-	if sub != "" && regexp.MustCompile(`^\d+$`).MatchString(sub) {
+	since := 0
+	if sub == "today" {
+		count = sumMaxCount
+		now := time.Now()
+		since = int(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix())
+	} else if sub != "" && regexp.MustCompile(`^\d+$`).MatchString(sub) {
 		count, _ = strconv.Atoi(sub)
 	}
-	if count < 10 || count > 500 {
-		return kit.Fail("消息数量范围为 10-500")
+	if count < 10 || count > sumMaxCount {
+		return kit.Fail("消息数量范围为 10-2000")
 	}
 	provider := ""
 	for index, arg := range inv.Args {
@@ -752,14 +765,18 @@ func (s *sumService) instant(ctx context.Context, inv *command.Invocation, sub s
 			provider = inv.Args[index+1]
 		}
 	}
-	if err := inv.EditText(ctx, "📝 正在生成群聊摘要..."); err != nil {
+	progress := "📝 正在生成群聊摘要..."
+	if since > 0 {
+		progress = "📝 正在生成今日群聊摘要..."
+	}
+	if err := inv.EditText(ctx, progress); err != nil {
 		return err
 	}
 	db, err := s.read()
 	if err != nil {
 		return err
 	}
-	html, err := s.summarize(ctx, inv.Client, sumJob{chatID: inv.Message.ChatID, count: count, provider: provider,
+	html, err := s.summarize(ctx, inv.Client, sumJob{chatID: inv.Message.ChatID, count: count, since: since, provider: provider,
 		spoiler: db.AIConfig.DefaultSpoiler, beforeID: inv.Message.ID})
 	if err != nil {
 		return err
@@ -789,7 +806,7 @@ func (s *sumService) instant(ctx context.Context, inv *command.Invocation, sub s
 func (s *sumService) debug(ctx context.Context, inv *command.Invocation) error {
 	count := 50
 	if value, err := strconv.Atoi(inv.Arg(1)); err == nil && value > 0 {
-		count = kit.Clamp(value, 1, 500)
+		count = kit.Clamp(value, 1, sumMaxCount)
 	}
 	if err := inv.EditText(ctx, "⏳ 正在获取消息..."); err != nil {
 		return err
