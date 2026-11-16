@@ -193,7 +193,7 @@ func providerModels(ctx context.Context, cfg aiConfig, tag string) ([]string, er
 		base = root.String()
 	}
 	target := aiEndpoint(base, endpoint)
-	headers := map[string]string{"User-Agent": CodexUserAgent}
+	headers := map[string]string{"User-Agent": ClientUserAgent}
 	switch kind {
 	case "gemini", "local-cliproxy":
 		authenticated, _ := url.Parse(target)

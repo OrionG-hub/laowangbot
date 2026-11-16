@@ -310,7 +310,7 @@ func sumCallAI(ctx context.Context, provider sumProvider, messages, prompt, reas
 			headers["x-api-key"], headers["anthropic-version"] = provider.APIKey, "2023-06-01"
 			data = map[string]any{"model": provider.Model, "max_tokens": 2000, "messages": []any{map[string]any{"role": "user", "content": input}}}
 		default:
-			headers["Authorization"], headers["User-Agent"] = "Bearer "+provider.APIKey, ai.CodexUserAgent
+			headers["Authorization"], headers["User-Agent"] = "Bearer "+provider.APIKey, ai.ClientUserAgent
 			if protocol == "responses" {
 				target = base + "/v1/responses"
 				data = map[string]any{"model": provider.Model, "input": []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": input}}}}, "max_output_tokens": 2000, "store": false}

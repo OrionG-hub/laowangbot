@@ -38,8 +38,10 @@ var (
 	aiForbiddenModel = regexp.MustCompile(`(?i)^gpt-5\.6-(?:luna|terra)(?:$|[-/])`)
 )
 
-// CodexUserAgent 是请求 OpenAI 兼容接口时带的 User-Agent。
-const CodexUserAgent = "codex-tui/0.146.0 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.146.0)"
+// ClientUserAgent 是请求 OpenAI 兼容接口时带的 User-Agent，
+// 模拟 Claude Code 客户端：部分中转站（如星驰）只放行受支持的编程客户端，
+// Codex 的 UA 在 /v1/chat/completions 上会被 403 拦掉，Claude Code 的可正常通过。
+const ClientUserAgent = "claude-cli/2.1.14 (external, cli)"
 
 type aiProvider struct {
 	Tag       string            `json:"tag"`
