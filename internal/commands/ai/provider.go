@@ -210,7 +210,7 @@ func buildChatRequest(cfg aiConfig, sel aiSelection, text, systemPrompt string, 
 	}
 	headers := map[string]string{"Content-Type": "application/json"}
 	if format == formatOpenAI {
-		headers["User-Agent"] = CodexUserAgent
+		headers["User-Agent"] = ClientUserAgent
 	}
 	switch {
 	case format == formatGemini || kind == "local-cliproxy":
