@@ -196,7 +196,7 @@ func aiHelp(prefix string) string {
 	p := command.Escape(prefix)
 	return "<blockquote expandable><b>🤖 智能 AI 助手</b>\n\n<b>⚙️ API 配置:</b>\n• <code>" + p + "ai config add tag url key [type]</code> - 添加 API 配置\n• <code>" + p + "ai config del tag</code> - 删除 API 配置\n• <code>" + p +
 		"ai config list</code> - 查看配置\n• <code>" + p + "ai config set tag url|key|type|stream|responses value</code> - 修改已有配置的一项\n• <code>" + p + "ai config type tag openai-compatible|openai|gemini|anthropic|doubao|moonshot|local-cliproxy</code> - 设置 API 类型\n• <code>" + p + "ai config stream tag on|off</code> - 流式传输\n• <code>" + p +
-		"ai config responses tag on|off</code> - Responses 模式\n\n<b>🧠 模型设置:</b>\n• <code>" + p + "ai model</code> - 查看当前模型\n• <code>" + p + "ai model chat tag model</code> - 设置聊天模型\n• <code>" + p + "ai model search tag model</code> - 设置搜索模型（未设置时沿用聊天模型）\n• <code>" + p +
+		"ai config responses tag on|off</code> - Responses 模式\n\n<b>🧠 模型设置:</b>\n• <code>" + p + "ai model</code> - 查看当前模型\n• <code>" + p + "ai model chat tag model</code> - 设置聊天模型\n• <code>" + p + "ai model search tag model</code> - 设置搜索模型（未设置时沿用聊天模型）\n• <code>" + p + "ai use [序号|tag]</code> - 按编号快速切换聊天模型\n• <code>" + p +
 		"ai reasoning chat|search auto|none|minimal|low|medium|high|xhigh</code>\n• <code>" + p + "ai service chat|search auto|default|priority|fast|flex</code>\n\n<b>💬 提问:</b>\n• <code>" + p + "ai 问题</code> - 向 AI 提问；回复一条消息时，那条消息作为上下文，其中的图片一并发送\n• <code>" + p +
 		"ai search 问题</code> - 联网搜索并回答\n\n<b>✍️ 输出设置:</b>\n• <code>" + p + "ai prompt</code> / <code>" + p + "ai prompt set 内容</code> / <code>" + p + "ai prompt del</code>\n• <code>" + p + "ai collapse [on|off]</code> - 消息折叠\n• <code>" + p + "ai timeout [秒数]</code>\n• <code>" + p +
 		"ai telegraph [on|off|limit 数量|del 序号|del all]</code>\n\nLite 版不支持 image / video 生成。</blockquote>\n\n<b>密钥配置：</b>涉及 API Key 的命令请在收藏夹中执行。"
@@ -250,6 +250,61 @@ func modelStatus(cfg aiConfig) string {
 		"⚡ search 服务等级: " + command.Code(cfg.CurrentSearchServiceTier),
 	}
 	return "🤖 <b>当前 AI 配置:</b>\n\n" + strings.Join(rows, "\n")
+}
+
+// useModel 处理 .ai use：不带参数列出所有配置的编号；带序号或 tag 切换聊天模型。
+// 编号按 tag 字母顺序固定，切换时用该配置已保存的聊天模型。
+func (s *Service) useModel(ctx context.Context, inv *command.Invocation) error {
+	cfg, err := s.read()
+	if err != nil {
+		return err
+	}
+	tags := make([]string, 0, len(cfg.Configs))
+	for name := range cfg.Configs {
+		tags = append(tags, name)
+	}
+	sort.Strings(tags)
+	if len(tags) == 0 {
+		return kit.Fail("尚未配置 API")
+	}
+	arg := strings.ToLower(inv.Arg(1))
+	if arg == "" {
+		var rows []string
+		for i, name := range tags {
+			marker := ""
+			if name == cfg.CurrentChatTag {
+				marker = " ← 当前"
+			}
+			model := cfg.Configs[name].Models["chat"]
+			if model == "" {
+				model = "-"
+			}
+			rows = append(rows, fmt.Sprintf("%d. %s · %s%s", i+1, command.Code(name), command.Escape(model), marker))
+		}
+		return inv.Edit(ctx, "🤖 <b>AI 模型列表</b>\n\n"+strings.Join(rows, "\n")+"\n\n用法：<code>"+inv.Prefix+"ai use 序号</code> 或 <code>"+inv.Prefix+"ai use tag</code>")
+	}
+	tag := arg
+	if n, err := strconv.Atoi(arg); err == nil {
+		if n < 1 || n > len(tags) {
+			return kit.Failf("序号超出范围（1-%d）", len(tags))
+		}
+		tag = tags[n-1]
+	}
+	provider, ok := cfg.Configs[tag]
+	if !ok {
+		return kit.Fail("API 配置不存在")
+	}
+	model := provider.Models["chat"]
+	if model == "" {
+		return kit.Fail("该配置未设置聊天模型，先用 ai model chat " + tag + " 模型 设置")
+	}
+	if err := s.update(func(cfg *aiConfig) error {
+		cfg.CurrentChatTag, cfg.CurrentChatModel = tag, model
+		return nil
+	}); err != nil {
+		return err
+	}
+	return inv.Edit(ctx, kit.Feedback("success", "已切换到 "+tag+" / "+model, ""))
 }
 
 // telegraphStatus 是不带参数的 .ai telegraph 显示的状态和记录。
@@ -321,6 +376,8 @@ func (s *Service) handle(ctx context.Context, inv *command.Invocation) error {
 			return err
 		}
 		return inv.Edit(ctx, kit.Feedback("success", mode+" 模型已设置", ""))
+	case "use":
+		return s.useModel(ctx, inv)
 	case "reasoning", "service":
 		if inv.Arg(1) == "" {
 			label := "思考强度"

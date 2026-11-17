@@ -679,7 +679,7 @@ func sumHelp(prefix string) string {
 		"• " + code(" edit ID spoiler on|off") + " / " + code(" edit ID provider [名称]") + " / " + code(" edit ID prompt [内容]") + "\n" +
 		"• " + code(" reorder") + " - 按当前顺序重新编号\n• " + code(" debug [数量]") + " - 预览发给 AI 的文本\n\n" +
 		"<b>AI 配置</b>\n• " + code(" config list") + "\n• " + code(" config add 名称 BaseURL API_KEY 模型 [auto|chat|responses|gemini|anthropic]") + "\n• " + code(" config set default 名称") + "\n• " +
-		code(" config set 名称 model|url|key|type 值") + "\n• " + code(" config set preview|spoiler|reply on|off") + "\n• " + code(" config set push 目标") + "\n• " + code(" config set timeout 秒数") + " / " + code(" config set maxoutput 字符数") + "\n• " +
+		code(" config set 名称 model|url|key|type 值") + "\n• " + code(" use [序号|名称]") + " - 按编号快速切换默认服务商\n• " + code(" config set preview|spoiler|reply on|off") + "\n• " + code(" config set push 目标") + "\n• " + code(" config set timeout 秒数") + " / " + code(" config set maxoutput 字符数") + "\n• " +
 		code(" config set reasoning|service 值") + "\n• " + code(" config set prompt 内容|reset|show") + "\n• " + code(" config del 名称") + "\n\n没有 sum 自己的 AI 配置时，使用 ai 命令的聊天模型。"
 }
 
@@ -727,6 +727,8 @@ func (s *sumService) handle(ctx context.Context, inv *command.Invocation) error 
 		return inv.Edit(ctx, sumHelp(inv.Prefix))
 	case "config":
 		return s.config(ctx, inv)
+	case "use":
+		return s.useProvider(ctx, inv)
 	case "list", "ls":
 		return s.list(ctx, inv)
 	case "run", "now":
