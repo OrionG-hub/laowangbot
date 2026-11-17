@@ -2,6 +2,7 @@ package sum
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"slices"
 	"sort"
@@ -56,6 +57,49 @@ func (s *sumService) config(ctx context.Context, inv *command.Invocation) error 
 		return err
 	}
 	return inv.EditText(ctx, "✅ 摘要配置已更新")
+}
+
+// useProvider 处理 .sum use：不带参数列出所有服务商的编号；带序号或名称切换默认服务商。
+// 编号按名称字母顺序固定，与 config list 的顺序一致。
+func (s *sumService) useProvider(ctx context.Context, inv *command.Invocation) error {
+	db, err := s.read()
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(db.AIConfig.Providers))
+	for key := range db.AIConfig.Providers {
+		names = append(names, key)
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		return kit.Fail("尚未配置 AI")
+	}
+	arg := strings.ToLower(inv.Arg(1))
+	if arg == "" {
+		var rows []string
+		for i, key := range names {
+			marker := ""
+			if db.AIConfig.DefaultProvider == key {
+				marker = " ← 默认"
+			}
+			rows = append(rows, fmt.Sprintf("%d. %s · %s%s", i+1, command.Code(key), sumProviderView(db.AIConfig.Providers[key]), marker))
+		}
+		return inv.Edit(ctx, "<b>摘要 AI 列表</b>\n\n"+strings.Join(rows, "\n")+"\n\n用法：<code>"+inv.Prefix+"sum use 序号</code> 或 <code>"+inv.Prefix+"sum use 名称</code>")
+	}
+	name := arg
+	if n, err := strconv.Atoi(arg); err == nil {
+		if n < 1 || n > len(names) {
+			return kit.Failf("序号超出范围（1-%d）", len(names))
+		}
+		name = names[n-1]
+	}
+	if _, ok := db.AIConfig.Providers[name]; !ok {
+		return kit.Fail("AI 配置不存在")
+	}
+	if err := s.update(func(db *sumDB) error { db.AIConfig.DefaultProvider = name; return nil }); err != nil {
+		return err
+	}
+	return inv.EditText(ctx, "✅ 已切换到 "+name)
 }
 
 // configList 列出所有服务商、默认用哪个，以及提示词、推送目标和输出设置。
