@@ -125,7 +125,7 @@ func formatUptime(seconds float64) string {
 }
 
 func renderHelpList(registry *command.Registry, prefix string) string {
-	lines := []string{"<b>命令列表</b>", ""}
+	lines := []string{"<blockquote expandable><b>命令列表</b>", ""}
 	for _, cmd := range registry.Commands() {
 		usage := prefix + cmd.Name
 		if cmd.Usage != "" {
@@ -133,6 +133,7 @@ func renderHelpList(registry *command.Registry, prefix string) string {
 		}
 		lines = append(lines, command.Code(usage)+" — "+command.Escape(cmd.Description))
 	}
+	lines = append(lines, "</blockquote>")
 	quoted := make([]string, 0, len(registry.Prefixes()))
 	for _, value := range registry.Prefixes() {
 		quoted = append(quoted, command.Code(value))
