@@ -6,22 +6,16 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/app"
 	"github.com/OrionG-hub/laowangbot/internal/commands/aban"
 	"github.com/OrionG-hub/laowangbot/internal/commands/acn"
-	"github.com/OrionG-hub/laowangbot/internal/commands/acron"
-	"github.com/OrionG-hub/laowangbot/internal/commands/aff"
 	"github.com/OrionG-hub/laowangbot/internal/commands/ai"
 	"github.com/OrionG-hub/laowangbot/internal/commands/alias"
 	"github.com/OrionG-hub/laowangbot/internal/commands/bf"
-	"github.com/OrionG-hub/laowangbot/internal/commands/bgp"
 	"github.com/OrionG-hub/laowangbot/internal/commands/bin"
 	"github.com/OrionG-hub/laowangbot/internal/commands/calc"
 	"github.com/OrionG-hub/laowangbot/internal/commands/checkapi"
 	"github.com/OrionG-hub/laowangbot/internal/commands/core"
 	"github.com/OrionG-hub/laowangbot/internal/commands/da"
-	"github.com/OrionG-hub/laowangbot/internal/commands/ddg"
-	"github.com/OrionG-hub/laowangbot/internal/commands/dig"
 	"github.com/OrionG-hub/laowangbot/internal/commands/dme"
 	"github.com/OrionG-hub/laowangbot/internal/commands/eatgif"
-	"github.com/OrionG-hub/laowangbot/internal/commands/encode"
 	"github.com/OrionG-hub/laowangbot/internal/commands/gt"
 	"github.com/OrionG-hub/laowangbot/internal/commands/ids"
 	"github.com/OrionG-hub/laowangbot/internal/commands/ip"
@@ -34,7 +28,6 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/commands/react"
 	"github.com/OrionG-hub/laowangbot/internal/commands/restart"
 	"github.com/OrionG-hub/laowangbot/internal/commands/save"
-	"github.com/OrionG-hub/laowangbot/internal/commands/service"
 	"github.com/OrionG-hub/laowangbot/internal/commands/speedtest"
 	"github.com/OrionG-hub/laowangbot/internal/commands/sticker"
 	"github.com/OrionG-hub/laowangbot/internal/commands/sudo"
@@ -62,15 +55,10 @@ func RegisterAll(a *app.App) {
 	gt.Register(a)
 	tr.Register(a)
 	speedtest.Register(a)
-	service.Register(a)
 	log.Register(a)
 	bf.Register(a)
 	save.Register(a)
 	ip.Register(a)
-	dig.Register(a)
-	bgp.Register(a)
-	ddg.Register(a)
-	encode.Register(a)
 	bin.Register(a)
 	ids.Register(a)
 	sum.Register(a)
@@ -82,8 +70,6 @@ func RegisterAll(a *app.App) {
 	acn.Register(a)
 	yvlu.Register(a)
 	eatgif.Register(a)
-	aff.Register(a)
-	acron.Register(a)
 	sticker.Register(a)
 	tts.Register(a)
 	privacy.Register(a)
